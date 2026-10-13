@@ -2,3 +2,4 @@
 node_modules/
 .claude-plugin/types/
 docs/preview.html
+docs/capture.html

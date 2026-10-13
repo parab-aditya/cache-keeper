@@ -408,8 +408,42 @@ ${large}
 `
 }
 
-const out = fileURLToPath(new URL('../docs/preview.html', (import.meta as unknown as { url: string }).url))
-const html = build()
-mkdirSync(fileURLToPath(new URL('../docs', (import.meta as unknown as { url: string }).url)), { recursive: true })
+/** The page tools/record-gifs.mjs films (npm run is not needed: `npx -y tsx tools/preview.ts --capture`): the same band and sheet art as above,
+ * one slide at a time, dark or light, each slide set by window.show(name, i) so its animation starts from the top. */
+function captureHtml(): string {
+  const w = Math.round(95 * CELL_PX)
+  const only = (h: string) => h.split('\n<div class="info">')[0] as string
+  const slide = (th: ArtTheme, body: string, cap: string) =>
+    `<div class="stage" style="background:${SURFACE[th]};width:${w + 36}px">${body}<div class="cap" style="color:${th === 'dark' ? '#9a9a9f' : '#6b6b70'}">${esc(cap)}</div></div>`
+  const states: [string, Partial<LineInput>][] = [
+    ['Warm: the cache is alive and the next refresh is counting down', { ...KEPT, limits: { weekly: 41, overLimit: false, at: T } }],
+    ['Refreshing: a tiny refresh is being sent now', { status: { kind: 'refreshing', since: T, attempt: 0 } }],
+    ['Cooling: auto-refresh is off and the cache is about to expire', { settings: OFF, now: T + 52 * MIN }],
+    ['Cold: the cache expired, the next message pays to rebuild it', { ...COLD }],
+  ]
+  const full = { refreshes: 84, costUsd: 3.7, avoided: 5, grossUsd: 16.1 }
+  const sess = { refreshes: 21, costUsd: 0.8, avoided: 1, grossUsd: 4 }
+  const sheetOf = (th: ArtTheme) => slide(th, only(sheet(95, th, { input: base({ ...KEPT }), all: full, session: sess, dirty: false })), 'Settings: hover a label, its i or its control for the help')
+  const slides = {
+    states: states.map(([cap, o]) => slide('dark', only(band({ label: '', input: base(o) }, w, 'dark', 95)), cap)),
+    settings: [sheetOf('dark'), sheetOf('light')],
+  }
+  // The preview's own stylesheet, so the slides are drawn by exactly its rules.
+  const css = (build().match(/<style>[\s\S]*?<\/style>/) as RegExpMatchArray)[0]
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>cache-keeper capture</title>${css}
+<style>body{margin:0;padding:0;background:#000}.stage{box-sizing:border-box;padding:18px 18px 12px}.cap{margin-top:12px;font:12.5px/1.2 system-ui,-apple-system,Segoe UI,sans-serif}.info{display:none}</style></head>
+<body><div id="root"></div>
+<script>const S=${JSON.stringify(slides)};window.show=(n,i)=>{document.getElementById('root').innerHTML=S[n][i]}</script>
+</body></html>
+`
+}
+
+declare const process: { argv: string[] }
+const capture = process.argv.includes('--capture')
+const here = (f: string) => fileURLToPath(new URL(f, (import.meta as unknown as { url: string }).url))
+const out = here(capture ? '../docs/capture.html' : '../docs/preview.html')
+const html = capture ? captureHtml() : build()
+mkdirSync(here('../docs'), { recursive: true })
 writeFileSync(out, html)
 console.log(`wrote ${out} (${html.length} chars)`)

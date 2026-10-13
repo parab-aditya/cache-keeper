@@ -4,15 +4,13 @@ A Claude Code mod that keeps a chat's prompt cache warm while you are away, and 
 
 Claude Code caches your conversation so each new message only pays a small "cache read" for the old part. The cache expires after an idle period: 1 hour on Pro and Max plans, 5 minutes on API keys. Leave a chat for a lunch break or overnight (a question waiting for your answer, a long background job) and your next message writes the whole conversation into the cache again at full price. On a long chat that one message can cost a few percent of a weekly limit. cache-keeper sends a tiny refresh shortly before the cache would expire, for as long as you choose (8 hours by default), so the next message is a cheap read again. It adds nothing to the conversation.
 
-| Warm, dark | Warm, light |
-|---|---|
-| ![The band above the prompt, dark: Warm, next refresh in 50m, the keep chip 8h, the on switch and a gear](docs/band-dark.png) | ![The band above the prompt, light](docs/band-light.png) |
+![The band above the prompt cycling through its states: Warm with embers rising and the next refresh counting down, Refreshing with a shimmer, Cooling in an amber alert when auto-refresh is off, and Cold with frost and snowflakes](docs/states.gif)
 
-The gear opens the settings sheet (shown with sample figures):
+The band's states: warm (embers rise while the next refresh counts down), refreshing (a shimmer while the refresh is sent), cooling (auto-refresh is off and the cache is about to expire) and cold (it expired; the next message rewrites the chat).
 
-| Settings, dark | Settings, light |
-|---|---|
-| ![The settings sheet, dark: keep warm for, refresh before it expires, skip chats smaller than, stop at weekly usage](docs/sheet-dark.png) | ![The settings sheet, light](docs/sheet-light.png) |
+The gear opens the settings sheet (shown with sample figures, dark and light). Pointing at a setting shows what it does:
+
+![The settings sheet, dark then light: keep warm for, refresh before it expires, skip chats smaller than, stop at weekly usage, with each setting's help shown as the pointer moves over it](docs/settings.gif)
 
 ## Requirements
 
@@ -155,7 +153,7 @@ claude plugin validate <path-to-this-folder>
 claude plugin test <path-to-this-folder>
 ```
 
-`npx -y tsx tools/preview.ts` writes `docs/preview.html`, a page that draws the band and the settings sheet in every state from the real modules.
+`npx -y tsx tools/preview.ts` writes `docs/preview.html`, a page that draws the band and the settings sheet in every state from the real modules. `node tools/record-gifs.mjs` films the same page into `docs/states.gif` and `docs/settings.gif` (needs ffmpeg; Playwright's Chromium is fetched on the fly).
 
 ## Credits and licence
 
