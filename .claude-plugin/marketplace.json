@@ -1,0 +1,12 @@
+{
+  "name": "heycache",
+  "owner": { "name": "Aditya Parab" },
+  "description": "Claude Code mods by Aditya Parab. cache-keeper keeps a chat's prompt cache warm while you are away.",
+  "plugins": [
+    {
+      "name": "cache-keeper",
+      "source": "./",
+      "description": "Keeps the main conversation's prompt cache warm while you are away, within a window you choose, and shows its state above the prompt."
+    }
+  ]
+}

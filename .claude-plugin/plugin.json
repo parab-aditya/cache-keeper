@@ -1,0 +1,96 @@
+{
+  "name": "cache-keeper",
+  "version": "0.2.0",
+  "description": "Keeps the main conversation's prompt cache warm while you are away, within a window you choose, and shows its state above the prompt.",
+  "author": {
+    "name": "Aditya Parab"
+  },
+  "homepage": "https://github.com/parab-aditya/cache-keeper",
+  "repository": "https://github.com/parab-aditya/cache-keeper",
+  "license": "MIT",
+  "keywords": [
+    "prompt-cache",
+    "cache",
+    "keep-warm",
+    "usage",
+    "cost",
+    "mod"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "keepFor": {
+      "type": "string",
+      "title": "Keep the cache warm for",
+      "description": "How long after your last message the cache is refreshed before it expires. off stops warming.",
+      "default": "8h",
+      "options": [
+        "off",
+        "2h",
+        "4h",
+        "8h",
+        "12h",
+        "forever"
+      ]
+    },
+    "lead": {
+      "type": "string",
+      "title": "Refresh this many minutes before expiry",
+      "description": "Applies to the 1-hour cache; the 5-minute cache is refreshed 30 seconds before expiry.",
+      "default": "5",
+      "options": [
+        "2",
+        "3",
+        "5",
+        "10",
+        "15"
+      ]
+    },
+    "minTokens": {
+      "type": "string",
+      "title": "Skip contexts smaller than",
+      "description": "Tokens in the prompt below which refreshing costs more than rewriting would.",
+      "default": "30000",
+      "options": [
+        "10000",
+        "30000",
+        "50000",
+        "100000"
+      ]
+    },
+    "weeklyGuard": {
+      "type": "string",
+      "title": "Stop at weekly usage %",
+      "description": "Warming stops once your weekly plan usage reaches this percent.",
+      "default": "90",
+      "options": [
+        "50",
+        "75",
+        "80",
+        "90",
+        "95",
+        "100"
+      ]
+    },
+    "band": {
+      "type": "string",
+      "title": "Band above the prompt",
+      "description": "full shows state, savings and buttons; minimal a short line; off hides it.",
+      "default": "full",
+      "options": [
+        "full",
+        "minimal",
+        "off"
+      ]
+    },
+    "upgradeTo1h": {
+      "type": "string",
+      "title": "Use the 1-hour cache on API-key sessions",
+      "description": "Sets CLAUDE_CODE_PROMPT_CACHE_TTL=1h for this process when the 5-minute cache would otherwise apply.",
+      "default": "off",
+      "options": [
+        "off",
+        "on"
+      ]
+    }
+  }
+}
