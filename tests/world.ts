@@ -81,7 +81,16 @@ export const world = (on: On, o: WorldOptions = {}) => {
   mock.env(on, { HOME: '/home/t', ...o.env })
 
   const files = new Map<string, string>()
+  /** Each file's modification time on the mock clock (a write sets it; a test can set it to age a file). */
+  const mtimes = new Map<string, number>()
   on('fs.exists', (_, e) => ({ value: files.has(e.path) }))
+  on('fs.list', (_, e) => {
+    const dir = `${e.path}/`
+    const entries = [...files.keys()]
+      .filter(p => p.startsWith(dir) && !p.slice(dir.length).includes('/'))
+      .map(p => ({ name: p.slice(dir.length), kind: 'file' as const, size: 0, mtimeMs: mtimes.get(p) ?? clock.now(), isLink: false }))
+    return { value: entries }
+  })
   on('fs.read', (_, e) => {
     const text = files.get(e.path)
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
@@ -90,6 +99,7 @@ export const world = (on: On, o: WorldOptions = {}) => {
   on('fs.write', (_, e) => {
     if (o.failWrites) throw new Error('disk full')
     files.set(e.path, e.text)
+    mtimes.set(e.path, clock.now())
     return { value: undefined }
   })
   const stored = new Map<string, unknown>()
@@ -242,7 +252,7 @@ export const world = (on: On, o: WorldOptions = {}) => {
   }
 
   return {
-    clock, skew, files, stored, usage, envSets, configSets, configDeny, theme, os, probes, panes, toasts, invalidations, appended, logged, forks, replies, toolResults, toolCalls,
+    clock, skew, files, mtimes, stored, usage, envSets, configSets, configDeny, theme, os, probes, panes, toasts, invalidations, appended, logged, forks, replies, toolResults, toolCalls,
     holdFork, holdStep, holdTool, noResponse,
     setUsage: (u: TurnUsage) => {
       nextUsage = u

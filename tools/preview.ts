@@ -17,11 +17,11 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 // @ts-ignore
 import { fileURLToPath } from 'node:url'
 declare const console: { log(...a: unknown[]): void }
-import { ART_RIGHT, PALETTE, artLayers, chipSvg, clockFrames, clockSvg, clockWidth, closeSvg, dotSvg, gearSvg, infoSvg, saveSvg, segSvg, sliderSvg, toggleSvg } from '../hooks/art'
+import { ART_RIGHT, PALETTE, artLayers, chipSvg, clockFrames, clockSvg, clockWidth, closeSvg, dotSvg, emberSvg, gearSvg, infoSvg, saveSvg, segSvg, sliderSvg, toggleSvg } from '../hooks/art'
 import type { ArtState, ArtTheme } from '../hooks/art'
 import { bandLine, fmtMinutes, keepLabel, savingsOf, tierOf } from '../hooks/policy'
 import type { Line, LineInput, Seg } from '../hooks/policy'
-import { CELL_PX, CHIP_CELLS, CONTROL_PX, GEAR_CELLS, GUTTER_CELLS, INLINE_COLUMNS, INLINE_CONTROL_PX, LABEL_CELLS, MARK_CELLS, MARK_PX, SAVE_CELLS, SHEET_TOGGLE_CELLS, STOP_CELLS, TOGGLE_CELLS, TWO_COLUMNS, artStateOf, cellsPx, coldStripFits, segCells, sheetBlocks, sheetModel, sheetRows } from '../hooks/view'
+import { CELL_PX, CHIP_CELLS, CONTROL_PX, ELSEWHERE_CELLS, GEAR_CELLS, GUTTER_CELLS, INLINE_COLUMNS, INLINE_CONTROL_PX, LABEL_CELLS, MARK_CELLS, MARK_PX, SAVE_CELLS, SHEET_TOGGLE_CELLS, STOP_CELLS, TOGGLE_CELLS, TWO_COLUMNS, artStateOf, cellsPx, coldStripFits, segCells, sheetBlocks, sheetModel, sheetRows } from '../hooks/view'
 import type { SessionKind, SheetId, SheetRow } from '../hooks/view'
 import type { Settings } from '../types'
 
@@ -43,13 +43,15 @@ const base = (o: Partial<LineInput>): LineInput => ({
   ...o,
 })
 
-type Row = { label: string; input: LineInput; widths?: number[] }
+/** `elsewhere`: how many of the user's other sessions are warming (the ember chip beside the keep chip; none draws none). */
+type Row = { label: string; input: LineInput; widths?: number[]; elsewhere?: number }
 const COLD = { now: T + 3 * 60 * MIN, status: { kind: 'waiting' } } as const
 const KEPT = { chain: { touchAt: T, refreshes: 3, costUsd: 0.2412 } } as const
 const WIDE = [760, 480, 320]
 const ROWS: Row[] = [
   { label: 'on, scheduled (hover the line for the card)', input: base({ ...KEPT, limits: { weekly: 41, overLimit: false, at: T } }), widths: [1100, 760, 640, 480, 320] },
   { label: 'on, scheduled, waiting on your answer / a background task', input: base({ dialog: { id: 'd', tool: 'AskUserQuestion', since: T }, tasks: [{ id: 'a', kind: 'shell', desc: '', since: T }] }), widths: [1100, 760] },
+  { label: 'on, scheduled, with 2 other sessions warming: the ember chip (a flame and the count) beside the keep chip; press it to open the list', input: base({ ...KEPT }), elsewhere: 2, widths: [1100, 760, 640, 480, 320] },
   { label: 'refreshing', input: base({ status: { kind: 'refreshing', since: T, attempt: 0 } }), widths: WIDE },
   { label: 'retrying', input: base({ status: { kind: 'retrying', nextAt: T + 7 * MIN, attempt: 1, error: 'overloaded 529' } }), widths: WIDE },
   { label: 'off, cache warm', input: base({ settings: OFF, now: T + 18 * MIN }), widths: [760, 640, 480, 320] },
@@ -96,7 +98,7 @@ function segHtml(seg: Seg, color: string, dim: string): string {
   return `<span class="seg">${parts.join('')}</span>`
 }
 
-type Ctl = { on: boolean; c: ReturnType<typeof palette>; light: boolean; keep: string | null; open: boolean; dirty?: boolean }
+type Ctl = { elsewhere?: number; on: boolean; c: ReturnType<typeof palette>; light: boolean; keep: string | null; open: boolean; dirty?: boolean }
 const palette = (art: ArtState, theme: ArtTheme) => PALETTE[theme][art]
 
 /** The drawn controls, as band.tsx draws them: keep chip (shown while on, not in the tiny tier, not while the sheet is open), Save as default (sheet open, session differs), switch, then the gear, or the drawn close mark while the sheet is open. The Svg is exactly the box's cells wide, the click target (blank Button over all of it) outlined by `.hit` under "show click targets". */
@@ -104,11 +106,15 @@ function controls(k: Ctl): string {
   const tp = cellsPx(TOGGLE_CELLS)
   const gp = cellsPx(GEAR_CELLS)
   const cp = cellsPx(CHIP_CELLS)
+  const ep = cellsPx(ELSEWHERE_CELLS)
+  const ember = k.elsewhere
+    ? `<span class="hit" style="width:${ELSEWHERE_CELLS * CELL_PX}px"><img alt="Warming in ${k.elsewhere} other sessions" src="${uri(inBandFont(emberSvg(k.elsewhere, k.light, ep, NOW)))}" width="${ep}" height="18"></span>`
+    : ''
   const chip = k.keep
     ? `<span class="hit" style="width:${CHIP_CELLS * CELL_PX}px"><img alt="Keep warm for ${esc(k.keep)}" src="${uri(inBandFont(chipSvg(k.keep, k.c, cp)))}" width="${cp}" height="18"></span>`
     : ''
   return (
-    `<span class="ctl">${chip}${k.open && k.dirty ? `<span class="hit" style="width:${SAVE_CELLS * CELL_PX}px"><img alt="Save as default" src="${uri(inBandFont(saveSvg('Save as default', k.c, cellsPx(SAVE_CELLS))))}" width="${cellsPx(SAVE_CELLS)}" height="18"></span>` : ''}<span class="hit" style="width:${TOGGLE_CELLS * CELL_PX}px"><img alt="Auto-refresh ${k.on ? 'on' : 'off'}" src="${uri(toggleSvg(k.on, k.c, tp))}" width="${tp}" height="16"></span>` +
+    `<span class="ctl">${ember}${chip}${k.open && k.dirty ? `<span class="hit" style="width:${SAVE_CELLS * CELL_PX}px"><img alt="Save as default" src="${uri(inBandFont(saveSvg('Save as default', k.c, cellsPx(SAVE_CELLS))))}" width="${cellsPx(SAVE_CELLS)}" height="18"></span>` : ''}<span class="hit" style="width:${TOGGLE_CELLS * CELL_PX}px"><img alt="Auto-refresh ${k.on ? 'on' : 'off'}" src="${uri(toggleSvg(k.on, k.c, tp))}" width="${tp}" height="16"></span>` +
     (k.open
       ? `<span class="hit" style="width:${GEAR_CELLS * CELL_PX}px"><img alt="Close settings" src="${uri(closeSvg(k.c.text, gp))}" width="${gp}" height="14"></span>`
       : `<span class="hit" style="width:${GEAR_CELLS * CELL_PX}px"><img alt="Settings" src="${uri(gearSvg(k.c.text, gp))}" width="${gp}" height="14"></span>`) +
@@ -132,9 +138,9 @@ function band(row: Row, widthPx: number, theme: ArtTheme, cols?: number, showCar
   const t = TERM[theme]
   const info = layers.map(l => `${l.key} ${l.anchor} ${l.svg.length} chars`).join(' · ')
   const keep = on && tierOf(columns) !== 'tiny' ? keepLabel(row.input.settings.keepFor) : null
-  const term = `${keep ? `[ keep ${keep} ] ` : ''}[ ${on ? 'on' : 'off'} ] [ settings ]`
+  const term = `${row.elsewhere ? `+${row.elsewhere} warming elsewhere ` : ''}${keep ? `[ keep ${keep} ] ` : ''}[ ${on ? 'on' : 'off'} ] [ settings ]`
   return `<div class="band" style="width:${widthPx}px;background:${c.bg};border-color:${c.edge};color:${c.text};--accent:${c.accent};--edge:${c.edge};--bg:${c.bg}">
-${imgs}<div class="row"><img src="${uri(dotSvg(art, light, NOW))}" alt="" width="10" height="10"><span class="line">${segHtml(line, c.text, c.dim)}${card}</span>${controls({ on, c, light, keep, open: false })}</div></div>
+${imgs}<div class="row"><img src="${uri(dotSvg(art, light, NOW))}" alt="" width="10" height="10"><span class="line">${segHtml(line, c.text, c.dim)}${card}</span>${controls({ on, c, light, keep, open: false, ...(row.elsewhere ? { elsewhere: row.elsewhere } : {}) })}</div></div>
 <div class="info">${esc(`${art} · ${columns} columns, ${tierOf(columns)} tier · ${info}`)}</div>
 <div class="term" style="background:${t.bg};color:${t.fg}"><span style="color:${termColor(art, theme)}">${esc(line.symbol)}</span> ${esc(line.text)} <span class="tb">${esc(term)}</span></div>`
 }

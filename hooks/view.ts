@@ -24,6 +24,8 @@ export const CONTROL_PX = 20
 export const INLINE_CONTROL_PX = 17
 export const GEAR_CELLS = 3
 export const CHIP_CELLS = 5
+/** The elsewhere chip (a flame and one or two characters): a little wider than the keep chip. */
+export const ELSEWHERE_CELLS = 6
 /** The header's Save as default pill: its label (15 characters) and a little air. */
 export const SAVE_CELLS = 17
 export const cellsPx = (cells: number): number => Math.floor(cells * CELL_PX)
@@ -35,7 +37,7 @@ export const coldStripFits = (columns: number, cells: number): boolean => column
 /** The art a line gets is its tone. */
 export const artStateOf = (line: Line): ArtState => line.tone
 
-export type ButtonKey = 'toggle' | 'settings' | 'keep'
+export type ButtonKey = 'toggle' | 'settings' | 'keep' | 'elsewhere'
 
 /** Wide enough for two columns of settings (each half of the body, 5 cells apart); below this, and from INLINE_COLUMNS up, one row per setting.
  * tests/band.test.ts checks it against the widest control (two of them, the gutter and the body's 8 cells fit from 87). */

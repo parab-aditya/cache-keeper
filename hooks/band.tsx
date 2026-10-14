@@ -6,18 +6,19 @@
 import type { Elements, RenderElement } from 'claude-code'
 
 import type { KeepFor } from '../types'
-import { PALETTE, artLayers, chipSvg, clockFrames, clockSvg, closeSvg, dotSvg, gearSvg, saveSvg, toggleSvg } from './art'
+import { PALETTE, artLayers, chipSvg, clockFrames, clockSvg, closeSvg, dotSvg, emberSvg, gearSvg, saveSvg, toggleSvg } from './art'
 import type { ArtColors, ArtState } from './art'
 import { hit } from './hit'
 import type { Io } from './io'
 import { A, lineInputOf, openSettings, safely, setSettings, setSheet, snapshot, themeSoon, toggleWarming } from './keeper'
 import { paneActions, paneModel } from './pane'
 import type { PaneModel } from './pane'
+import { elsewhereTitle } from './live'
 import { bandLine, fmtMinutes, keepLabel, lineText, nextKeep, tierOf } from './policy'
 import type { Line, Seg, Tier } from './policy'
 import { sheetBody } from './sheet'
 import type { SheetActions } from './sheet'
-import { CELL_PX, CHIP_CELLS, GEAR_CELLS, SAVE_CELLS, TOGGLE_CELLS, artStateOf, cellsPx, coldStripFits, sheetFits } from './view'
+import { CELL_PX, CHIP_CELLS, ELSEWHERE_CELLS, GEAR_CELLS, SAVE_CELLS, TOGGLE_CELLS, artStateOf, cellsPx, coldStripFits, sheetFits } from './view'
 import type { ButtonKey } from './view'
 
 export type BandModel = {
@@ -33,6 +34,8 @@ export type BandModel = {
   /** The session's window: what the keep chip shows (it is hidden while warming is off). */
   keepFor: KeepFor
   tier: Tier
+  /** How many of the user's other sessions are warming (the ember chip shows it; 0 hides the chip). */
+  elsewhere: number
   /** The settings sheet is open (desktop, full style, room for it): its body's model. */
   sheet: PaneModel | null
 }
@@ -62,6 +65,7 @@ export async function bandModel(io: Io, hasSurvey: boolean, geo: Geo): Promise<B
     on: s.settings.keepFor !== 'off',
     keepFor: s.settings.keepFor,
     tier,
+    elsewhere: s.elsewhere.length,
     sheet: open && fits ? await paneModel(io) : null,
   }
 }
@@ -77,6 +81,8 @@ async function closeToPane(io: Io): Promise<void> {
 export const pressButton = (io: Io, key: ButtonKey, geo: Geo): Promise<void> =>
   safely(io, `band.${key}`, async () => {
     if (key === 'toggle') return toggleWarming(io)
+    // The chip opens the list: the Pane's "Warming elsewhere" section.
+    if (key === 'elsewhere') return void ((await io.openPane()) || io.toast('cache-keeper: widen the window to see the other sessions'))
     if (key === 'keep') {
       const { keepFor } = await io.read(A.settings)
       // Off has no window to cycle: the chip is hidden then; a stale press does nothing.
@@ -151,6 +157,8 @@ function desktop(ui: Desktop, columns: number, m: BandModel, press: Press, close
   // The keep chip is the window: hidden while warming is off (there is no window then), in the tiny tier (no room) and while the sheet is
   // open (its first row is the window then).
   const showKeep = m.on && m.tier !== 'tiny' && !open
+  // Beside it, a flame and a count while other sessions are warming (hidden at none and while the sheet is open, like the keep chip). Ember whatever this band's tone.
+  const showElsewhere = m.elsewhere > 0 && !open
   const layers = artLayers(m.art, { light: m.light, nowMs: m.nowMs, strip: coldStripFits(columns, Array.from(line?.text ?? '').length), fadeDown: open })
   return (
     <Box flexDirection="column">
@@ -213,6 +221,7 @@ function desktop(ui: Desktop, columns: number, m: BandModel, press: Press, close
           {/* The controls are in the flow, as wide as they are: the line above gives way to them. A positioned box paints over the art. */}
           <Box key="ck-controls" position="relative" flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
             <Box position="absolute" top={0} left={0} />
+            {showElsewhere ? hit(ui, { id: 'ck-elsewhere', cells: ELSEWHERE_CELLS, svg: emberSvg(m.elsewhere, m.light, cellsPx(ELSEWHERE_CELLS), m.nowMs), alt: elsewhereTitle(m.elsewhere), height: 18, onPress: () => press('elsewhere') }) : null}
             {showKeep ? hit(ui, { id: 'ck-keep', cells: CHIP_CELLS, svg: chipSvg(keepLabel(m.keepFor), c, cellsPx(CHIP_CELLS)), alt: `Keep warm for ${m.keepFor === 'forever' ? 'no end' : m.keepFor}`, height: 18, onPress: () => press('keep') }) : null}
             {m.sheet?.dirty ? hit(ui, { id: 'ck-save', cells: SAVE_CELLS, svg: saveSvg('Save as default', c, cellsPx(SAVE_CELLS)), alt: 'Save as default', height: 18, onPress: sheetAct.save }) : null}
             {hit(ui, { id: 'ck-toggle', cells: TOGGLE_CELLS, svg: toggleSvg(m.on, c, cellsPx(TOGGLE_CELLS)), alt: m.on ? 'Auto-refresh on' : 'Auto-refresh off', height: 16, onPress: () => press('toggle') })}
@@ -242,6 +251,11 @@ function terminal(ui: Elements['terminal'], m: BandModel, press: Press, inner: R
             {m.line.word ? m.line.text.slice(m.line.word.length) : m.line.text}
           </Text>
         </Box>
+        {m.elsewhere > 0 ? (
+          <Box key="ck-elsewhere" flexShrink={0}>
+            <Text dimColor wrap="truncate">{m.tier === 'tiny' ? `+${m.elsewhere}` : `+${m.elsewhere} warming elsewhere`}</Text>
+          </Box>
+        ) : null}
         {m.on && m.tier !== 'tiny' ? <Button key="ck-keep" label={`keep ${keepLabel(m.keepFor)}`} hotkey="k" onPress={() => press('keep')} /> : null}
         <Button key="ck-toggle" label={m.on ? 'on' : 'off'} hotkey="o" onPress={() => press('toggle')} />
         <Button key="ck-settings" label="settings" hotkey="s" onPress={() => press('settings')} />
@@ -269,7 +283,7 @@ export function bandTree(
     return (
       <Box flexDirection="column">
         <Text dimColor wrap="truncate">
-          {lineText(m.line)}
+          {m.elsewhere > 0 ? `${lineText(m.line)} · +${m.elsewhere} warming elsewhere` : lineText(m.line)}
         </Text>
         {inner}
       </Box>

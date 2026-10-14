@@ -2,6 +2,7 @@
 import type { KeepFor } from '../types'
 import { saveRow } from './defaults'
 import type { Io } from './io'
+import { elsewhereTitle, requestStop, rescan, rowText } from './live'
 import { logTail, readAllTime } from './log'
 import {
   A,
@@ -37,7 +38,7 @@ import {
 } from './policy'
 
 export const ARGUMENT_HINT =
-  'status | on | off | keep <2h|4h|8h|12h|forever> [--save] | lead <min> [--save] | refresh-now | stats | settings | debug'
+  'status | on | off | keep <2h|4h|8h|12h|forever> [--save] | lead <min> [--save] | refresh-now | stats | settings | sessions | stop <n|all> | debug'
 
 const USAGE = [
   'Usage: `/cache <sub>`',
@@ -45,9 +46,13 @@ const USAGE = [
   '- `on` / `off`: warm for the saved window / stop warming this session',
   '- `keep <2h|4h|8h|12h|forever> [--save]`, `lead <2-15> [--save]`',
   '- `refresh-now`, `settings`',
+  '- `sessions`: your other sessions that are keeping the cache warm; `stop <n|all>` asks them to stop',
 ].join('\n')
 
 const KEEPS: readonly KeepFor[] = ['2h', '4h', '8h', '12h', 'forever']
+
+/** The session ids `/cache sessions` last printed, in order: `/cache stop <n>` means the n-th of these (matched by id, the list may have moved). */
+let printed: string[] = []
 
 const ago = (s: Snap, at: number) => `${fmtIn(s.now - at)} ago`
 
@@ -167,6 +172,33 @@ export async function runCommand(io: Io, args: string): Promise<{ text: string }
       const where = await openSettings(io)
       if (where === 'sheet') return say('Settings opened above the prompt.')
       return say(where === 'pane' ? 'Settings pane opened.' : 'The settings pane has no room here: widen the window, or use `/config` (rows `cache-keeper.*`).')
+    }
+    case 'sessions': {
+      const list = await rescan(io)
+      printed = list.map(e => e.sessionId)
+      if (list.length === 0) return say('No other session is warming.')
+      const now = await io.now()
+      return say([
+        `**${elsewhereTitle(list.length)}**`,
+        ...list.map((e, i) => `${i + 1}. ${rowText(e, now)}`),
+        'Stop one: `/cache stop 2` · all: `/cache stop all`',
+      ].join('\n'))
+    }
+    case 'stop': {
+      const list = await rescan(io)
+      const n = Number(arg)
+      if (arg !== 'all' && !(Number.isInteger(n) && n >= 1)) return say('Usage: `/cache stop <n|all>` (numbers are the ones `/cache sessions` printed)')
+      if (list.length === 0) return say('No other session is warming.')
+      const id = arg === 'all' ? undefined : (printed.length > 0 ? printed : list.map(e => e.sessionId))[n - 1]
+      if (arg !== 'all' && id === undefined) return say(`There is no session ${n}: run \`/cache sessions\` to see the list.`)
+      const targets = arg === 'all' ? list : list.filter(e => e.sessionId === id)
+      const moved = printed.length > 0 && JSON.stringify(printed) !== JSON.stringify(list.map(e => e.sessionId))
+      if (targets.length === 0) return say('That session is no longer warming: run `/cache sessions` for the current list.')
+      const done = await requestStop(io, targets)
+      const lines = done.map(t => `Asked ${t.label} to stop; it stops before its next refresh.`)
+      if (done.length < targets.length) lines.push('Could not write the stop request for every session (see the debug log).')
+      if (moved && arg !== 'all') lines.push('The list changed since `/cache sessions`: matched by session, not by number.')
+      return say(lines.join('\n'))
     }
     case 'debug': {
       const s = await snapshot(io)

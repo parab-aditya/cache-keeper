@@ -4,9 +4,10 @@
 // The ui.render hook (component Pane, requestId 'cache-keeper') lives in register.tsx; this file builds the model and the tree.
 import type { Elements } from 'claude-code'
 
-import type { KeepFor, Settings } from '../types'
+import type { Elsewhere, KeepFor, Settings } from '../types'
 import { changes, saveAsDefault } from './defaults'
 import type { Io } from './io'
+import { elsewhereTitle, requestStop, rowText } from './live'
 import { safely, savedSettings, sessionKind, setSettings, snapshot } from './keeper'
 import { readAllTime } from './log'
 import { OPTIONS, savingsOf } from './policy'
@@ -22,6 +23,9 @@ export type PaneModel = {
   dirty: boolean
   /** The savings line: what the refreshes saved, overall and this session. */
   savings: Savings
+  /** The user's other warming sessions (the "Warming elsewhere" section), and the time their idle spans count from. */
+  elsewhere: Elsewhere[]
+  now: number
 }
 
 export async function paneModel(io: Io): Promise<PaneModel> {
@@ -32,6 +36,8 @@ export async function paneModel(io: Io): Promise<PaneModel> {
     kind: sessionKind(),
     dirty: Object.keys(changes(s.settings, savedSettings())).length > 0,
     savings: savingsOf(all, s.session),
+    elsewhere: s.elsewhere,
+    now: s.now,
   }
 }
 
@@ -87,6 +93,8 @@ export const paneActions = (io: Io, onClose: () => Promise<unknown> = () => io.c
       await saveAsDefault(io, s.settings, savedSettings())
     }),
   close: () => void safely(io, 'pane.close', onClose),
+  /** Asks other sessions to stop: their live files get a stop request, and their rows say "stopping…" until they report back. */
+  stop: (targets: readonly Elsewhere[]) => void safely(io, 'pane.stop', () => requestStop(io, targets)),
 })
 
 /** The savings in one line: the figure bold and the session dim, or one dim line until something was avoided. */
@@ -104,6 +112,29 @@ export const savingsLine = (ui: Elements['terminal'] | Elements['desktop'] | Ele
   )
 }
 
+/** The "Warming elsewhere" section: a row per other session with a Stop button (or "stopping…"), and Stop all from two. At most MAX_ROWS rows; /cache sessions has the rest. */
+const MAX_ROWS = 5
+const elsewhereSection = (ui: Elements['terminal'] | Elements['desktop'] | Elements['vscode'], m: PaneModel, act: ReturnType<typeof paneActions>) => {
+  const { Box, Text, Button } = ui
+  if (m.elsewhere.length === 0) return null
+  const live = m.elsewhere.filter(e => !e.stopping)
+  return (
+    <Box key="ck-elsewhere" flexDirection="column">
+      <Text bold>{elsewhereTitle(m.elsewhere.length)}</Text>
+      {m.elsewhere.slice(0, MAX_ROWS).map(e => (
+        <Box key={`ck-else-${e.sessionId}`} flexDirection="row" gap={1}>
+          <Box flexGrow={1} flexShrink={1} minWidth={0}>
+            <Text dimColor={e.stopping === true} wrap="truncate">{rowText(e, m.now)}</Text>
+          </Box>
+          {e.stopping ? null : <Button key={`ck-stop-${e.sessionId}`} label="Stop" onPress={() => act.stop([e])} />}
+        </Box>
+      ))}
+      {m.elsewhere.length > MAX_ROWS ? <Text dimColor>{`+${m.elsewhere.length - MAX_ROWS} more: /cache sessions`}</Text> : null}
+      {m.elsewhere.length >= 2 && live.length > 0 ?<Button key="ck-stop-all" label="Stop all" onPress={() => act.stop(live)} /> : null}
+    </Box>
+  )
+}
+
 export function paneTree(
   ui: Elements['terminal'] | Elements['desktop'] | Elements['vscode'],
   m: PaneModel,
@@ -113,6 +144,7 @@ export function paneTree(
   return (
     <Box flexDirection="column" gap={1}>
       {savingsLine(ui, m)}
+      {elsewhereSection(ui, m, act)}
       <Box flexDirection="column">
         {ROWS.map(r => {
           // /cache lead 7 puts a value in the session that the row does not list: show it rather than a wrong pick.

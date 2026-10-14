@@ -358,6 +358,25 @@ export function chipSvg(label: string, c: ArtColors, boxW = 39): string {
   )
 }
 
+/**
+ * The elsewhere chip: a small flame and the number of the user's other sessions that are warming (`9+` from ten), as an outlined pill in
+ * the ember colours (always, whatever this session's own tone: it is about other sessions), centred in a `boxW` px image (its click
+ * target). The flame breathes gently (2.6 s, opacity and a slight lift), phase-locked to `nowMs` like the dot, so a redraw does not restart it.
+ */
+export function emberSvg(count: number, light: boolean, boxW: number, nowMs: number): string {
+  const e = PALETTE[light ? 'light' : 'dark'].warm
+  const label = count > 9 ? '9+' : String(count)
+  const w = Math.min(boxW - 2, Math.ceil([...label].length * 7.5 + 28))
+  const x = (boxW - w) / 2
+  const flame = 'M5 .6C5.7 3 8.7 4.7 8.7 8.3A3.7 3.7 0 0 1 1.3 8.3C1.3 6.9 1.9 5.9 2.7 5C3 6 3.5 6.4 4 6.4 4 4 4.1 2 5 .6Z'
+  const css = '.f{transform-box:fill-box;transform-origin:50% 100%;animation:f 2.6s ease-in-out infinite}@keyframes f{0%,100%{opacity:.8;transform:scale(1)}50%{opacity:1;transform:scale(1.08,1.12)}}'
+  const svg =
+    `<svg ${NS} width="${boxW}" height="18" viewBox="0 0 ${boxW} 18"><style>${css}</style><rect x="${n1(x)}" y="1" width="${n1(w)}" height="16" rx="8" fill="${e.accent}" fill-opacity=".14" stroke="${e.accent}" stroke-opacity=".7" stroke-width="1"/>` +
+    `<g transform="translate(${n1(x + 8)} 2.5)"><path class="f" d="${flame}" fill="${e.accent}"/></g>` +
+    `<text x="${n1(x + w - 9)}" y="13" text-anchor="end" style="font-size:12px;font-weight:600;fill:${e.text}">${label}</text></svg>`
+  return inPhase(svg, nowMs)
+}
+
 /** The close mark: an X in the gear's stroke (1.3 px, the text colour), 14 px high, centred in a `boxW` px image (its click target). Drawn, not
  * a glyph: a text X in a blank-padded Button came out as two dots. */
 export function closeSvg(color: string, boxW = 24): string {

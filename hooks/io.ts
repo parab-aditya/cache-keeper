@@ -29,6 +29,8 @@ export type Io = {
   fsExists(path: string): Promise<boolean>
   fsRead(path: string): Promise<string>
   fsWrite(path: string, text: string): Promise<void>
+  /** `$.fs.list(path)`: the directory's entries (rejects when it is missing). */
+  fsList(path: string): Promise<readonly { name: string; mtimeMs: number }[]>
   /** `$.process.run(argv)`: rejects when the command cannot start. */
   run(argv: readonly string[]): Promise<{ exitCode: number; stdout: string }>
   storeGet(key: string): Promise<unknown>

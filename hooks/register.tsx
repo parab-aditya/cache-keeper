@@ -19,6 +19,7 @@ import {
   onToolCall,
   onTurnComplete,
   noteBand,
+  noteIdentity,
   onTurnStart,
   refreshTheme,
   resetKeeper,
@@ -29,6 +30,7 @@ import {
   stepStart,
 } from './keeper'
 import type { Io, KeeperState } from './io'
+import { isDrawn, noteDrawn, rescan } from './live'
 import { resetLog } from './log'
 import { paneActions, paneModel, paneTree } from './pane'
 import { DEFAULT_SETTINGS } from './policy'
@@ -55,6 +57,7 @@ const surfaceA = atom({ plugin: 'cache-keeper', key: 'surface' } as const, null,
 const lightA = atom({ plugin: 'cache-keeper', key: 'light' } as const, false, { shape: 'ck2' })
 const sheetOpenA = atom({ plugin: 'cache-keeper', key: 'sheetOpen' } as const, false, { shape: 'ck2' })
 const ttlSetA = atom({ plugin: 'cache-keeper', key: 'ttlSet' } as const, false, { shape: 'ck2' })
+const elsewhereA = atom({ plugin: 'cache-keeper', key: 'elsewhere' } as const, [], { shape: 'ck2' })
 
 /** keeper.ts names state by key; each key reads and updates its own atom. */
 const stateOf = ($: EngineInterface) => ({
@@ -76,6 +79,7 @@ const stateOf = ($: EngineInterface) => ({
   light: { read: () => read($, lightA), update: (fn: (v: KeeperState['light']) => KeeperState['light']) => update($, lightA, fn) },
   sheetOpen: { read: () => read($, sheetOpenA), update: (fn: (v: KeeperState['sheetOpen']) => KeeperState['sheetOpen']) => update($, sheetOpenA, fn) },
   ttlSet: { read: () => read($, ttlSetA), update: (fn: (v: KeeperState['ttlSet']) => KeeperState['ttlSet']) => update($, ttlSetA, fn) },
+  elsewhere: { read: () => read($, elsewhereA), update: (fn: (v: KeeperState['elsewhere']) => KeeperState['elsewhere']) => update($, elsewhereA, fn) },
 })
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -100,6 +104,7 @@ const ioOf = ($: EngineInterface): Io => ({
   fsExists: path => $.fs.exists(path),
   fsRead: path => $.fs.read(path),
   fsWrite: (path, text) => $.fs.write(path, text),
+  fsList: async path => (await $.fs.list(path)).map(f => ({ name: f.name, mtimeMs: f.mtimeMs })),
   run: async argv => {
     const r = await $.process.run(argv, { timeoutMs: 3000 })
     return { exitCode: r.exitCode, stdout: r.stdout }
@@ -139,6 +144,7 @@ export const register: Register = (on, options) => {
       io.debug(`cache-keeper: command.register failed: ${errText(err)}`)
     }
     await safely(io, 'session.start', async () => {
+      noteIdentity({ cwd: e.cwd })
       const env = {
         force: await $.env.get('FORCE_PROMPT_CACHING_5M'),
         envTtl: await $.env.get('CLAUDE_CODE_PROMPT_CACHE_TTL'),
@@ -157,6 +163,8 @@ export const register: Register = (on, options) => {
         void safely(io, 'tick', async () => {
           if ((await read($, surfaceA)) === 'terminal') $.ui.invalidate('ui.render')
           await refreshTheme(io)
+          // The other sessions' list: looked at each minute while this session has drawn a band or a pane.
+          if (isDrawn()) await rescan(io)
         })
       })
     })
@@ -257,6 +265,7 @@ export const register: Register = (on, options) => {
     const io = ioOf($)
     const geo = { desktop: e.surface === 'desktop', columns: e.props.bodyColumns, maxRows: e.props.maxRows }
     noteBand(geo)
+    if (noteDrawn()) $.clock.after(0, () => void safely(io, 'scan', () => rescan(io)))
     const model = await bandModel(io, e.props.hasSurvey, geo).catch(err => {
       io.debug(`cache-keeper: band: ${errText(err)}`)
       return null
@@ -275,6 +284,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: 'cache-keeper' }, async ($, e, next) => {
     if (e.surface === 'mobile') return next(e)
     const io = ioOf($)
+    if (noteDrawn()) $.clock.after(0, () => void safely(io, 'scan', () => rescan(io)))
     return paneTree($.ui.resolve(e), await paneModel(io), paneActions(io))
   })
 }

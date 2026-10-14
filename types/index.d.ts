@@ -96,6 +96,43 @@ export type Totals = { refreshes: number; costUsd: number; avoided: number; gros
 
 export type Resumed = { tokens: number; estUsd?: number; cold: boolean }
 
+/**
+ * One session's file in `~/.claude/cache-keeper/live/<sessionId>.json` (no conversation text): written by that session only,
+ * read by the user's other sessions. `seen` is its last write; a reader counts it live only while `warming` and `seen` is under 12 minutes old.
+ */
+export type LiveEntry = {
+  v: 1
+  sessionId: string
+  /** The session title when known, else the working folder's name, else the first 8 characters of the id. */
+  label: string
+  cwd?: string
+  warming: boolean
+  status: Status['kind']
+  keepFor: KeepFor
+  /** Absent: no end. */
+  windowEnd?: number
+  nextAt?: number
+  lastPromptAt?: number
+  contextTokens?: number
+  /** This session's refresh spend. */
+  costUsd: number
+  seen: number
+}
+
+/** Another live warming session as this one lists it (a LiveEntry's useful part); `stopping`: a stop was asked and the file has not yet said it stopped. */
+export type Elsewhere = {
+  sessionId: string
+  label: string
+  cwd?: string
+  status: Status['kind']
+  windowEnd?: number
+  nextAt?: number
+  lastPromptAt?: number
+  costUsd: number
+  seen: number
+  stopping?: boolean
+}
+
 // Aliases for the module block below: inside `declare module 'claude-code'` plain names like Settings and Task
 // resolve to claude-code's own exports first.
 export type CkAnchor = Anchor
@@ -108,6 +145,7 @@ export type CkLimits = Limits
 export type CkRefreshRecord = RefreshRecord
 export type CkTotals = Totals
 export type CkResumed = Resumed
+export type CkElsewhere = Elsewhere
 
 declare module 'claude-code' {
   // Every key carries the shape tag 'ck2' (atoms in hooks/register.tsx): a value another version of the code
@@ -141,6 +179,8 @@ declare module 'claude-code' {
       sheetOpen: Shaped<boolean>
       /** The mod itself set CLAUDE_CODE_PROMPT_CACHE_TTL=1h (upgradeTo1h), so turning that off unsets it. */
       ttlSet: Shaped<boolean>
+      /** The user's other live warming sessions (live/*.json), rescanned each minute while a band or pane is drawn; sorted by `seen`, then label. */
+      elsewhere: Shaped<CkElsewhere[]>
     }
   }
 }

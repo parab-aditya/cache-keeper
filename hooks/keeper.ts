@@ -7,6 +7,7 @@ import type {
   Anchor,
   Chain,
   Dialog,
+  Elsewhere,
   Limits,
   RefreshRecord,
   KeepFor,
@@ -21,6 +22,8 @@ import type {
 import type { Io, KeeperState } from './io'
 import { drainSave, keptDefaults, forgetKept } from './defaults'
 import { addAllTime, logLine, readLearned, saveLearned } from './log'
+import { HEARTBEAT_MS, entryOf, resetLive, stopAskedAt, writeEntry } from './live'
+import type { Ident } from './live'
 import { sheetFits } from './view'
 import type { Learned } from './log'
 import {
@@ -78,9 +81,15 @@ export const A = {
   light: 'light',
   sheetOpen: 'sheetOpen',
   ttlSet: 'ttlSet',
+  elsewhere: 'elsewhere',
 } as const
 
-const put = <K extends keyof KeeperState>(io: Io, key: K, v: KeeperState[K]) => io.update(key, () => v)
+// A status change is the moment this session's live file (live.ts) may be out of date: one place, here.
+const put = <K extends keyof KeeperState>(io: Io, key: K, v: KeeperState[K]) =>
+  io.update(key, () => v).then(r => {
+    if (key === A.status) void publish(io)
+    return r
+  })
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -107,8 +116,28 @@ let noticedAt: number | undefined
 const baselines: { five?: Base; week?: Base } = {}
 const warned = new Set<string>()
 const surfaceSeen = new Set<string>()
+/** What the live file says about who this session is (the title from the classic SessionStart, the folder from session.start). */
+let ident: Ident = {}
+/** When warming was last turned on in this session (the keep chip, /cache on, a setting): a stop request older than this is ignored. Unset: the session's start. */
+let onAt: number | undefined
+let ended = false
+/** The heartbeat of the live file, armed while this session is warming. */
+let beat: Timer | undefined
+/** Why the user-off stop in flight is happening, when it is another session's request. */
+let remoteWhy: string | undefined
+
+export const noteIdentity = (i: Ident): void => {
+  ident = { ...ident, ...i }
+}
 
 export function resetKeeper(): void {
+  ident = {}
+  onAt = undefined
+  ended = false
+  beat?.cancel()
+  beat = undefined
+  remoteWhy = undefined
+  resetLive()
   lastOn = null
   themeAt = undefined
   themeNote = 'theme: not read yet'
@@ -174,6 +203,7 @@ export type Snap = {
   surface: 'terminal' | 'desktop' | null
   light: boolean
   sheetOpen: boolean
+  elsewhere: Elsewhere[]
 }
 
 export async function snapshot(io: Io): Promise<Snap> {
@@ -188,7 +218,7 @@ export async function snapshot(io: Io): Promise<Snap> {
     io.read(A.tasks),
     io.read(A.limits),
   ])
-  const [contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen] = await Promise.all([
+  const [contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere] = await Promise.all([
     io.read(A.contextTokens),
     io.read(A.costUsd),
     io.read(A.refreshing),
@@ -198,10 +228,11 @@ export async function snapshot(io: Io): Promise<Snap> {
     io.read(A.surface),
     io.read(A.light),
     io.read(A.sheetOpen),
+    io.read(A.elsewhere),
   ])
   return {
     now, anchor, chain, status, settings, turn, dialog, tasks, limits,
-    contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen,
+    contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere,
   }
 }
 
@@ -315,6 +346,7 @@ export async function start(io: Io, options: Readonly<Record<string, unknown>>, 
   // Saved defaults a /config row refused (see defaults.ts) sit over the manifest options.
   const defaults = readOptions({ ...options, ...(await keptDefaults(io)) })
   saved = defaults
+  ended = false
   const settings = await io.settings().catch(err => {
     warn(io, 'settings.read', err)
     return {} as Record<string, unknown>
@@ -411,7 +443,9 @@ async function applyUpgrade(io: Io, s: Settings, limits: Limits | null): Promise
 }
 
 export async function setSettings(io: Io, patch: Partial<Settings>): Promise<void> {
+  const wasOff = (await io.read(A.settings)).keepFor === 'off'
   const next = await io.update(A.settings, s => ({ ...s, ...patch }))
+  if (wasOff && next.keepFor !== 'off') onAt = await io.now()
   if (patch.upgradeTo1h) await applyUpgrade(io, next, await io.read(A.limits))
   // Off again: take back the variable the mod set (never one the user set).
   else if (patch.upgradeTo1h === false && (await io.read(A.ttlSet))) {
@@ -477,9 +511,65 @@ export async function setSurface(io: Io, surface: 'terminal' | 'desktop'): Promi
 const REEVALUATED = new Set<StopCode>(['user-off', 'weekly-guard'])
 
 export function schedule(io: Io): Promise<void> {
-  const run = schedChain.then(() => scheduleNow(io)).then(() => armView(io)).catch(err => warn(io, 'schedule', err))
+  const run = schedChain.then(() => scheduleNow(io)).then(() => armView(io)).then(() => publish(io)).catch(err => warn(io, 'schedule', err))
   schedChain = run
   return run as Promise<void>
+}
+
+/** This session is keeping its cache warm: on, with a chain to keep, and refreshes planned or running (a held or finished one is not). The band's warm look, and what the live file calls `warming`. */
+export const isKept = (s: Snap): boolean =>
+  s.settings.keepFor !== 'off' && s.anchor !== null && s.chain !== null && (s.status.kind === 'scheduled' || s.status.kind === 'waiting' || s.status.kind === 'refreshing' || s.status.kind === 'retrying')
+
+/**
+ * Writes this session's live file from the state as it is when the write's turn comes, and keeps the heartbeat (a write each
+ * HEARTBEAT_MS, which also looks for a stop request) armed exactly while the session is warming. Never throws.
+ */
+export const publish = (io: Io, force = false): Promise<void> =>
+  writeEntry(
+    io,
+    async () => {
+      const s = await snapshot(io)
+      const warming = !ended && isKept(s)
+      if (!warming) {
+        beat?.cancel()
+        beat = undefined
+      } else if (!beat) {
+        beat = io.after(HEARTBEAT_MS, () => {
+          beat = undefined
+          void safely(io, 'heartbeat', async () => {
+            await checkRemoteStop(io)
+            await publish(io, true)
+          })
+        })
+      }
+      return entryOf(s, warming, await io.sessionId(), ident)
+    },
+    force,
+  )
+
+/** Another session asked this one to stop after it last turned warming on. */
+async function remoteStopDue(io: Io): Promise<boolean> {
+  const at = await stopAskedAt(io)
+  return at !== undefined && at > (onAt ?? (await io.read(A.session)).since)
+}
+
+/**
+ * Stops exactly like `/cache off` (so `/cache on` restores the window), as another session asked: logs the stop with its reason and
+ * says so once in the conversation. True when it stopped. Checked right before every fork and on each heartbeat.
+ */
+export async function checkRemoteStop(io: Io): Promise<boolean> {
+  if (!(await remoteStopDue(io))) return false
+  const cur = (await io.read(A.settings)).keepFor
+  if (cur === 'off') return false
+  lastOn = cur
+  remoteWhy = 'stopped from another session'
+  try {
+    await setSettings(io, { keepFor: 'off' })
+  } finally {
+    remoteWhy = undefined
+  }
+  await notice(io, await snapshot(io), 'stopped from another session')
+  return true
 }
 
 /**
@@ -493,7 +583,7 @@ async function armView(io: Io): Promise<void> {
   const s = await snapshot(io)
   if (!s.anchor || !s.chain) return
   const exp = expiresAt(s.chain, s.anchor.ttl)
-  const kept = s.settings.keepFor !== 'off' && (s.status.kind === 'scheduled' || s.status.kind === 'waiting' || s.status.kind === 'refreshing' || s.status.kind === 'retrying')
+  const kept = isKept(s)
   // +1 ms: the band is cold only after the expiry, not at it.
   const at = (kept ? [exp + 1] : [exp - coolMs(s.anchor.ttl), exp + 1]).find(t => t > s.now)
   if (at === undefined) return
@@ -558,7 +648,7 @@ async function scheduleNow(io: Io): Promise<void> {
         if (status.kind === 'stopped') await putStatus(io, status, { kind: 'waiting' })
         return
       }
-      await stop(io, d.code, d.reason, d.coldSince)
+      await stop(io, d.code, d.code === 'user-off' && remoteWhy ? remoteWhy : d.reason, d.coldSince)
       return
   }
 }
@@ -633,6 +723,8 @@ export async function refresh(
   how: RefreshHow,
   dueAt?: number,
 ): Promise<string> {
+  // Before the claim and the fork: a stop another session asked for is honoured first, so no refresh forks after one it could have seen.
+  if (await checkRemoteStop(io)) return 'Stopped from another session.'
   const s = await snapshot(io)
   if (inFlight(s)) return 'A refresh is already running.'
   const { anchor, chain } = s
@@ -987,8 +1079,9 @@ export const onSubagentStop = (io: Io, e: { agent_id: string }): Promise<void> =
 
 export async function onClassicSessionStart(
   io: Io,
-  e: { source: string; context_tokens?: number; estimated_cache_write_usd?: number; prompt_cache_likely_expired?: boolean },
+  e: { source: string; session_title?: string; context_tokens?: number; estimated_cache_write_usd?: number; prompt_cache_likely_expired?: boolean },
 ): Promise<void> {
+  if (e.session_title) noteIdentity({ title: e.session_title })
   if (e.source === 'resume' || e.source === 'fork') {
     await put(io, A.resumed, {
       tokens: e.context_tokens ?? 0,
@@ -1004,10 +1097,14 @@ export async function onClassicSessionStart(
 }
 
 export const onCompact = (io: Io) => stop(io, 'compacted', 'conversation compacted', undefined, true)
-export const onSessionEnd = (io: Io, reason: string) =>
-  reason === 'clear'
+export async function onSessionEnd(io: Io, reason: string): Promise<void> {
+  // Ended before the stop: the live file says warming:false whatever the state is when its write comes. A clear is not the end: the session goes on.
+  ended = reason !== 'clear'
+  await (reason === 'clear'
     ? stop(io, 'cleared', 'conversation cleared', undefined, true)
-    : stop(io, 'session-ended', 'session ended', undefined, true)
+    : stop(io, 'session-ended', 'session ended', undefined, true))
+  await publish(io, true)
+}
 export const onModelSwitch = (io: Io) => stop(io, 'model-switched', 'model switched', undefined, true)
 
 /** A `/config` row of ours changed from the menu: apply it to the session (a reload reseeds nothing). */
