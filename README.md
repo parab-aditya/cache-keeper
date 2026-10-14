@@ -4,9 +4,9 @@ A Claude Code mod that keeps a chat's prompt cache warm while you are away, and 
 
 Claude Code caches your conversation so each new message only pays a small "cache read" for the old part. The cache expires after an idle period: 1 hour on Pro and Max plans, 5 minutes on API keys. Leave a chat for a lunch break or overnight (a question waiting for your answer, a long background job) and your next message writes the whole conversation into the cache again at full price. On a long chat that one message can cost a few percent of a weekly limit. cache-keeper sends a tiny refresh shortly before the cache would expire, for as long as you choose (8 hours by default), so the next message is a cheap read again. It adds nothing to the conversation.
 
-![The band above the prompt cycling through its states: Warm with embers rising and the next refresh counting down, Refreshing with a shimmer, Cooling in an amber alert when auto-refresh is off, and Cold with frost and snowflakes](docs/states.gif)
+![The band above the prompt cycling through its states: Warm with embers rising and the next refresh counting down, Warm with the ember chip counting 2 other warming sessions, Refreshing with a shimmer, Cooling in an amber alert when auto-refresh is off, and Cold with frost and snowflakes](docs/states.gif)
 
-The band's states: warm (embers rise while the next refresh counts down), refreshing (a shimmer while the refresh is sent), cooling (auto-refresh is off and the cache is about to expire) and cold (it expired; the next message rewrites the chat).
+The band's states: warm (embers rise while the next refresh counts down), warm with the ember chip (2 other sessions are warming too), refreshing (a shimmer while the refresh is sent), cooling (auto-refresh is off and the cache is about to expire) and cold (it expired; the next message rewrites the chat).
 
 The gear opens the settings sheet (shown with sample figures, dark and light). Pointing at a setting shows what it does:
 

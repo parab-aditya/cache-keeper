@@ -17,7 +17,7 @@ const HOLD = 3000
 
 // slide: show window.show(name, i); hover: a settings id whose label the pointer moves onto (null: move it away); ms: how long to hold.
 const GIFS = {
-  states: [0, 1, 2, 3].map(i => ({ slide: ['states', i], ms: HOLD })),
+  states: [0, 1, 2, 3, 4].map(i => ({ slide: ['states', i], ms: HOLD })),
   settings: [
     { slide: ['settings', 0], ms: 1500 },
     ...['keepFor', 'lead', 'minTokens', 'weeklyGuard'].map(hover => ({ hover, ms: 2600 })),

@@ -1297,8 +1297,8 @@ const IDS = ['keepFor', 'lead', 'minTokens', 'weeklyGuard', 'api'] as const
 const idsOf = (kind: SessionKind): readonly (typeof IDS)[number][] => sheetBlocks(kind).flat()
 const NAMES_OF = { keepFor: 'Keep warm for', lead: 'Refresh before it expires', minTokens: 'Skip chats smaller than', weeklyGuard: 'Stop at weekly usage', api: '1-hour cache for API keys' } as const
 const HELPS = {
-  keepFor: 'How long your chat stays ready after your last message. ∞ keeps it ready until you switch it off.',
-  lead: 'How many minutes before the cache would expire it gets refreshed. More minutes leaves room for retries.',
+  keepFor: 'How long your chat stays ready after your last message. ∞: no end.',
+  lead: 'Minutes before expiry to refresh. More leaves room for retries.',
   minTokens: 'Small chats are cheap to reload, so they are not kept warm.',
   weeklyGuard: 'Refreshing stops when your weekly plan usage reaches this level.',
   api: 'API-key sessions cache for 5 minutes by default. Turn on to ask for the 1-hour cache.',

@@ -100,8 +100,8 @@ export const GUARD_STOPS: Stop[] = stops([75, 80, 90, 95, 100], v => `${v}%`)
 
 /** The hover help, in plain words: it replaces the savings line while the pointer is on a setting's label or control. */
 export const HELP: Record<SheetId, string> = {
-  keepFor: 'How long your chat stays ready after your last message. ∞ keeps it ready until you switch it off.',
-  lead: 'How many minutes before the cache would expire it gets refreshed. More minutes leaves room for retries.',
+  keepFor: 'How long your chat stays ready after your last message. ∞: no end.',
+  lead: 'Minutes before expiry to refresh. More leaves room for retries.',
   minTokens: 'Small chats are cheap to reload, so they are not kept warm.',
   weeklyGuard: 'Refreshing stops when your weekly plan usage reaches this level.',
   api: 'API-key sessions cache for 5 minutes by default. Turn on to ask for the 1-hour cache.',
