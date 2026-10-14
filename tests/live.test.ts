@@ -252,6 +252,30 @@ test('handshake: a stop request newer than the last turn-on stops this session b
   expect(w.forks).toHaveLength(0)
 })
 
+for (const how of ['archived', 'deleted'] as const)
+  test(`desktop: a session the app ${how} stops warming at its next heartbeat, like /cache off, and never forks again`, async ($, on) => {
+    const w = world(on)
+    engineBand(on)
+    await start($)
+    deskFile(w, 'local_mine', SESSION_ID, 'Sidebar name')
+    await mount($, 'desktop')
+    await w.clock.advance(1)
+    await prompt($, w, 't1')
+    expect(own(w)).toMatchObject({ label: 'Sidebar name', warming: true })
+    await w.clock.advance(MINUTE)
+    const path = `${DESK}/local_mine.json`
+    if (how === 'archived') w.files.set(path, JSON.stringify({ cliSessionId: SESSION_ID, title: 'Sidebar name', isArchived: true }))
+    else w.files.delete(path)
+    // deleted needs two misses a minute or more apart (heartbeats at 5 and 10 minutes): both stop well before the 55-minute refresh
+    await w.clock.advance(15 * MINUTE)
+    const why = how === 'archived' ? 'session archived' : 'session deleted'
+    expect(await st($, 'status')).toMatchObject({ kind: 'stopped', code: 'user-off', reason: why })
+    expect(w.appended).toEqual([expect.stringContaining(why)])
+    expect(own(w)).toMatchObject({ warming: false, keepFor: 'off' })
+    await w.clock.advance(3 * HOUR)
+    expect(w.forks).toHaveLength(0)
+  })
+
 test('handshake: the heartbeat finds a request even when no refresh is due', async ($, on) => {
   const w = world(on)
   await start($)

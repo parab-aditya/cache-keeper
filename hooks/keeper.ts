@@ -22,7 +22,7 @@ import type {
 import type { Io, KeeperState } from './io'
 import { drainSave, keptDefaults, forgetKept } from './defaults'
 import { addAllTime, logLine, readLearned, saveLearned } from './log'
-import { HEARTBEAT_MS, desktopTitle, entryOf, resetLive, stopAskedAt, writeEntry } from './live'
+import { HEARTBEAT_MS, desktopState, entryOf, resetLive, stopAskedAt, writeEntry } from './live'
 import type { Ident } from './live'
 import { sheetFits } from './view'
 import type { Learned } from './log'
@@ -544,7 +544,7 @@ export const publish = (io: Io, force = false): Promise<void> =>
         })
       }
       // On the desktop, the sidebar's own title names the session best (a terminal session has none).
-      const title = s.surface === 'desktop' ? await desktopTitle(io) : undefined
+      const title = s.surface === 'desktop' ? (await desktopState(io)).title : undefined
       return entryOf(s, warming, await io.sessionId(), title ? { ...ident, title } : ident)
     },
     force,
@@ -556,23 +556,33 @@ async function remoteStopDue(io: Io): Promise<boolean> {
   return at !== undefined && at > ((await io.read(A.onAt)) ?? (await io.read(A.session)).since)
 }
 
+/** Why this session must stop warming now: another session asked, or (on the desktop) the app archived or deleted it. */
+async function stopWhy(io: Io): Promise<string | undefined> {
+  if (await remoteStopDue(io)) return 'stopped from another session'
+  if ((await io.read(A.surface)) !== 'desktop') return undefined
+  const d = await desktopState(io)
+  return d.archived ? 'session archived' : d.gone ? 'session deleted' : undefined
+}
+
 /**
- * Stops exactly like `/cache off` (so `/cache on` restores the window), as another session asked: logs the stop with its reason and
- * says so once in the conversation. True when it stopped. Checked right before every fork and on each heartbeat.
+ * Stops exactly like `/cache off` (so `/cache on` restores the window), as another session asked or because the desktop app archived or
+ * deleted this one: logs the stop with its reason and says so once in the conversation. True when it stopped. Checked right before
+ * every fork and on each heartbeat. Returns the reason when it stopped.
  */
-export async function checkRemoteStop(io: Io): Promise<boolean> {
-  if (!(await remoteStopDue(io))) return false
+export async function checkRemoteStop(io: Io): Promise<string | undefined> {
+  const why = await stopWhy(io)
+  if (why === undefined) return undefined
   const cur = (await io.read(A.settings)).keepFor
-  if (cur === 'off') return false
+  if (cur === 'off') return undefined
   lastOn = cur
-  remoteWhy = 'stopped from another session'
+  remoteWhy = why
   try {
     await setSettings(io, { keepFor: 'off' })
   } finally {
     remoteWhy = undefined
   }
-  await notice(io, await snapshot(io), 'stopped from another session')
-  return true
+  await notice(io, await snapshot(io), why)
+  return why
 }
 
 /**
@@ -727,7 +737,8 @@ export async function refresh(
   dueAt?: number,
 ): Promise<string> {
   // Before the claim and the fork: a stop another session asked for is honoured first, so no refresh forks after one it could have seen.
-  if (await checkRemoteStop(io)) return 'Stopped from another session.'
+  const stopped = await checkRemoteStop(io)
+  if (stopped) return `${stopped[0]?.toUpperCase()}${stopped.slice(1)}.`
   const s = await snapshot(io)
   if (inFlight(s)) return 'A refresh is already running.'
   const { anchor, chain } = s

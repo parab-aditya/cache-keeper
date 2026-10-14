@@ -48,49 +48,68 @@ export function entryOf(s: Snap, warming: boolean, sessionId: string, id: Ident)
   }
 }
 
-// The desktop app's sidebar title: each desktop session has a file claude-code-sessions/<account>/<org>/local_<id>.json holding its
-// `cliSessionId` and its `title` (renames included). Found once among the newest files, then re-read at most once a minute.
-const DESKTOP_SESSIONS = 'Library/Application Support/Claude/claude-code-sessions'
+// The desktop app's record of this session: each desktop session has a file <app>/claude-code-sessions/<account>/<org>/local_<id>.json
+// (app: `Claude`, or a second profile such as `Claude-Second`) holding its `cliSessionId`, its sidebar `title` (renames included) and
+// `isArchived`. Found once among the newest files, then re-read at most once a minute. A deleted session's file goes away.
+const APP_SUPPORT = 'Library/Application Support'
 export const TITLE_EVERY_MS = 60_000
-let titleFile: { sid: string; path: string } | undefined
-let titleAt = -Infinity
-let lastTitle: string | undefined
+export type DesktopState = { title?: string; archived: boolean; gone: boolean }
+let deskFile: { sid: string; path: string } | undefined
+let deskAt = -Infinity
+let desk: DesktopState = { archived: false, gone: false }
+/** Checks in a row that found the session's file missing: two (a minute or more apart) mean it was deleted, not mid-rewrite. */
+let misses = 0
 
-const titleOf = (text: string, sid: string): string | undefined => {
-  const d = JSON.parse(text) as { cliSessionId?: unknown; title?: unknown }
-  return d.cliSessionId === sid && typeof d.title === 'string' && d.title.trim() ? d.title : undefined
-}
+type DeskRecord = { cliSessionId?: unknown; title?: unknown; isArchived?: unknown }
+const fold = (d: DeskRecord): DesktopState => ({
+  ...(typeof d.title === 'string' && d.title.trim() ? { title: d.title } : desk.title !== undefined ? { title: desk.title } : {}),
+  archived: d.isArchived === true,
+  gone: false,
+})
 
-/** This desktop session's title as the sidebar shows it; undefined when not found (a terminal session, another OS). Never throws. */
-export async function desktopTitle(io: Io): Promise<string | undefined> {
+/** This desktop session's sidebar title and whether it was archived or deleted; nothing found means none (a terminal session, another OS). Never throws. */
+export async function desktopState(io: Io): Promise<DesktopState> {
   const now = await io.now()
-  if (now - titleAt < TITLE_EVERY_MS) return lastTitle
-  titleAt = now
+  if (now - deskAt < TITLE_EVERY_MS) return desk
+  deskAt = now
   try {
     const [home, sid] = await Promise.all([io.home(), io.sessionId()])
-    if (home === undefined) return lastTitle
-    if (titleFile?.sid === sid) return (lastTitle = titleOf(await io.fsRead(titleFile.path), sid) ?? lastTitle)
+    if (home === undefined) return desk
+    if (deskFile?.sid === sid) {
+      if (!(await io.fsExists(deskFile.path))) {
+        misses += 1
+        return (desk = { ...desk, gone: misses >= 2 })
+      }
+      misses = 0
+      const d = JSON.parse(await io.fsRead(deskFile.path)) as DeskRecord
+      if (d.cliSessionId === sid) desk = fold(d)
+      return desk
+    }
     // A /clear gives the same desktop session a new id: look again.
-    titleFile = undefined
-    const root = `${home}/${DESKTOP_SESSIONS}`
+    deskFile = undefined
+    misses = 0
     const files: { path: string; mtimeMs: number }[] = []
-    for (const a of await io.fsList(root).catch(() => []))
-      if (a.kind === 'dir')
-        for (const o of await io.fsList(`${root}/${a.name}`))
-          if (o.kind === 'dir')
-            for (const f of await io.fsList(`${root}/${a.name}/${o.name}`))
-              if (/^local_[\w-]+\.json$/.test(f.name)) files.push({ path: `${root}/${a.name}/${o.name}/${f.name}`, mtimeMs: f.mtimeMs })
+    for (const app of await io.fsList(`${home}/${APP_SUPPORT}`).catch(() => [])) {
+      if (app.kind !== 'dir' || !app.name.startsWith('Claude')) continue
+      const root = `${home}/${APP_SUPPORT}/${app.name}/claude-code-sessions`
+      for (const a of await io.fsList(root).catch(() => []))
+        if (a.kind === 'dir')
+          for (const o of await io.fsList(`${root}/${a.name}`))
+            if (o.kind === 'dir')
+              for (const f of await io.fsList(`${root}/${a.name}/${o.name}`))
+                if (/^local_[\w-]+\.json$/.test(f.name)) files.push({ path: `${root}/${a.name}/${o.name}/${f.name}`, mtimeMs: f.mtimeMs })
+    }
     // ponytail: only the 8 newest are read (the app rewrites a session's file as it is used); a miss tries again a minute later.
     for (const f of files.sort((x, y) => y.mtimeMs - x.mtimeMs).slice(0, 8)) {
-      const title = titleOf(await io.fsRead(f.path), sid)
-      if (title === undefined) continue
-      titleFile = { sid, path: f.path }
-      return (lastTitle = title)
+      const d = JSON.parse(await io.fsRead(f.path)) as DeskRecord
+      if (d.cliSessionId !== sid) continue
+      deskFile = { sid, path: f.path }
+      return (desk = fold(d))
     }
   } catch (err) {
-    io.debug(`cache-keeper: desktop title failed: ${errText(err)}`)
+    io.debug(`cache-keeper: desktop record failed: ${errText(err)}`)
   }
-  return lastTitle
+  return desk
 }
 
 let writeChain: Promise<unknown> = Promise.resolve()
@@ -107,9 +126,10 @@ export function resetLive(): void {
   failShown = false
   drawn = false
   asked.clear()
-  titleFile = undefined
-  titleAt = -Infinity
-  lastTitle = undefined
+  deskFile = undefined
+  deskAt = -Infinity
+  desk = { archived: false, gone: false }
+  misses = 0
 }
 
 /** A band or pane has been drawn: the minute scan starts to matter. True the first time. */
