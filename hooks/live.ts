@@ -26,7 +26,7 @@ export type Ident = { title?: string; cwd?: string }
 
 const oneLine = (t: string | undefined) => (t ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 60)
 const folderOf = (cwd: string | undefined) => (cwd ?? '').split(/[\\/]/).filter(Boolean).pop() ?? ''
-/** The session title when known, else the working folder's name, else the first 8 characters of the id. Never prompt text. */
+/** The session title when known (the desktop sidebar's, else the SessionStart one), else the working folder's name, else the first 8 characters of the id. Never prompt text. */
 export const labelOf = (sessionId: string, id: Ident): string => oneLine(id.title) || oneLine(folderOf(id.cwd)) || sessionId.slice(0, 8)
 
 export function entryOf(s: Snap, warming: boolean, sessionId: string, id: Ident): LiveEntry {
@@ -48,6 +48,51 @@ export function entryOf(s: Snap, warming: boolean, sessionId: string, id: Ident)
   }
 }
 
+// The desktop app's sidebar title: each desktop session has a file claude-code-sessions/<account>/<org>/local_<id>.json holding its
+// `cliSessionId` and its `title` (renames included). Found once among the newest files, then re-read at most once a minute.
+const DESKTOP_SESSIONS = 'Library/Application Support/Claude/claude-code-sessions'
+export const TITLE_EVERY_MS = 60_000
+let titleFile: { sid: string; path: string } | undefined
+let titleAt = -Infinity
+let lastTitle: string | undefined
+
+const titleOf = (text: string, sid: string): string | undefined => {
+  const d = JSON.parse(text) as { cliSessionId?: unknown; title?: unknown }
+  return d.cliSessionId === sid && typeof d.title === 'string' && d.title.trim() ? d.title : undefined
+}
+
+/** This desktop session's title as the sidebar shows it; undefined when not found (a terminal session, another OS). Never throws. */
+export async function desktopTitle(io: Io): Promise<string | undefined> {
+  const now = await io.now()
+  if (now - titleAt < TITLE_EVERY_MS) return lastTitle
+  titleAt = now
+  try {
+    const [home, sid] = await Promise.all([io.home(), io.sessionId()])
+    if (home === undefined) return lastTitle
+    if (titleFile?.sid === sid) return (lastTitle = titleOf(await io.fsRead(titleFile.path), sid) ?? lastTitle)
+    // A /clear gives the same desktop session a new id: look again.
+    titleFile = undefined
+    const root = `${home}/${DESKTOP_SESSIONS}`
+    const files: { path: string; mtimeMs: number }[] = []
+    for (const a of await io.fsList(root).catch(() => []))
+      if (a.kind === 'dir')
+        for (const o of await io.fsList(`${root}/${a.name}`))
+          if (o.kind === 'dir')
+            for (const f of await io.fsList(`${root}/${a.name}/${o.name}`))
+              if (/^local_[\w-]+\.json$/.test(f.name)) files.push({ path: `${root}/${a.name}/${o.name}/${f.name}`, mtimeMs: f.mtimeMs })
+    // ponytail: only the 8 newest are read (the app rewrites a session's file as it is used); a miss tries again a minute later.
+    for (const f of files.sort((x, y) => y.mtimeMs - x.mtimeMs).slice(0, 8)) {
+      const title = titleOf(await io.fsRead(f.path), sid)
+      if (title === undefined) continue
+      titleFile = { sid, path: f.path }
+      return (lastTitle = title)
+    }
+  } catch (err) {
+    io.debug(`cache-keeper: desktop title failed: ${errText(err)}`)
+  }
+  return lastTitle
+}
+
 let writeChain: Promise<unknown> = Promise.resolve()
 let lastSig = ''
 let lastAt = 0
@@ -62,6 +107,9 @@ export function resetLive(): void {
   failShown = false
   drawn = false
   asked.clear()
+  titleFile = undefined
+  titleAt = -Infinity
+  lastTitle = undefined
 }
 
 /** A band or pane has been drawn: the minute scan starts to matter. True the first time. */

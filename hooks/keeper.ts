@@ -22,7 +22,7 @@ import type {
 import type { Io, KeeperState } from './io'
 import { drainSave, keptDefaults, forgetKept } from './defaults'
 import { addAllTime, logLine, readLearned, saveLearned } from './log'
-import { HEARTBEAT_MS, entryOf, resetLive, stopAskedAt, writeEntry } from './live'
+import { HEARTBEAT_MS, desktopTitle, entryOf, resetLive, stopAskedAt, writeEntry } from './live'
 import type { Ident } from './live'
 import { sheetFits } from './view'
 import type { Learned } from './log'
@@ -543,7 +543,9 @@ export const publish = (io: Io, force = false): Promise<void> =>
           })
         })
       }
-      return entryOf(s, warming, await io.sessionId(), ident)
+      // On the desktop, the sidebar's own title names the session best (a terminal session has none).
+      const title = s.surface === 'desktop' ? await desktopTitle(io) : undefined
+      return entryOf(s, warming, await io.sessionId(), title ? { ...ident, title } : ident)
     },
     force,
   )

@@ -88,7 +88,10 @@ export const world = (on: On, o: WorldOptions = {}) => {
     const dir = `${e.path}/`
     const entries = [...files.keys()]
       .filter(p => p.startsWith(dir) && !p.slice(dir.length).includes('/'))
-      .map(p => ({ name: p.slice(dir.length), kind: 'file' as const, size: 0, mtimeMs: mtimes.get(p) ?? clock.now(), isLink: false }))
+      .map(p => ({ name: p.slice(dir.length), kind: 'file' as 'file' | 'dir', size: 0, mtimeMs: mtimes.get(p) ?? clock.now(), isLink: false }))
+    // and the folders a deeper file sits in
+    for (const d of new Set([...files.keys()].filter(p => p.startsWith(dir) && p.slice(dir.length).includes('/')).map(p => p.slice(dir.length).split('/')[0] as string)))
+      entries.push({ name: d, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
     return { value: entries }
   })
   on('fs.read', (_, e) => {

@@ -71,6 +71,34 @@ test('live: the label is the session title, else the folder, else the first 8 ch
   expect(own(w)).toMatchObject({ status: 'done', warming: false })
 })
 
+const DESK = '/home/t/Library/Application Support/Claude/claude-code-sessions/acct/org'
+const deskFile = (w: World, name: string, cliSessionId: string, title: string, mtime = w.clock.now()) => {
+  w.files.set(`${DESK}/${name}.json`, JSON.stringify({ sessionId: name, cliSessionId, title, titleSource: 'user' }))
+  w.mtimes.set(`${DESK}/${name}.json`, mtime)
+}
+
+test('live: on the desktop the label is the sidebar title from the app\'s session file, renames included; a terminal session keeps the folder', async ($, on) => {
+  const w = world(on)
+  engineBand(on)
+  await start($)
+  deskFile(w, 'local_other', 'someone-else', 'Not this one')
+  deskFile(w, 'local_mine', SESSION_ID, 'Sidebar name')
+  const term = await mount($, 'terminal')
+  await w.clock.advance(1)
+  await prompt($, w, 't1')
+  // the terminal has no sidebar: the folder
+  expect(own(w)).toMatchObject({ label: 'w', warming: true })
+  term.unmount?.()
+  await mount($, 'desktop')
+  await w.clock.advance(1)
+  await prompt($, w, 't2')
+  expect(own(w)).toMatchObject({ label: 'Sidebar name' })
+  // renamed in the sidebar: the next heartbeat carries it
+  deskFile(w, 'local_mine', SESSION_ID, 'Renamed in the sidebar')
+  await w.clock.advance(5 * MINUTE + 1)
+  expect(own(w)).toMatchObject({ label: 'Renamed in the sidebar' })
+})
+
 test('live: a heartbeat every 5 minutes while warming, none when not', async ($, on) => {
   const w = world(on)
   await start($)
