@@ -58,6 +58,7 @@ const lightA = atom({ plugin: 'cache-keeper', key: 'light' } as const, false, { 
 const sheetOpenA = atom({ plugin: 'cache-keeper', key: 'sheetOpen' } as const, false, { shape: 'ck2' })
 const ttlSetA = atom({ plugin: 'cache-keeper', key: 'ttlSet' } as const, false, { shape: 'ck2' })
 const elsewhereA = atom({ plugin: 'cache-keeper', key: 'elsewhere' } as const, [], { shape: 'ck2' })
+const onAtA = atom({ plugin: 'cache-keeper', key: 'onAt' } as const, null, { shape: 'ck2' })
 
 /** keeper.ts names state by key; each key reads and updates its own atom. */
 const stateOf = ($: EngineInterface) => ({
@@ -80,6 +81,7 @@ const stateOf = ($: EngineInterface) => ({
   sheetOpen: { read: () => read($, sheetOpenA), update: (fn: (v: KeeperState['sheetOpen']) => KeeperState['sheetOpen']) => update($, sheetOpenA, fn) },
   ttlSet: { read: () => read($, ttlSetA), update: (fn: (v: KeeperState['ttlSet']) => KeeperState['ttlSet']) => update($, ttlSetA, fn) },
   elsewhere: { read: () => read($, elsewhereA), update: (fn: (v: KeeperState['elsewhere']) => KeeperState['elsewhere']) => update($, elsewhereA, fn) },
+  onAt: { read: () => read($, onAtA), update: (fn: (v: KeeperState['onAt']) => KeeperState['onAt']) => update($, onAtA, fn) },
 })
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))

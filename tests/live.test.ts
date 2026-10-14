@@ -276,6 +276,25 @@ test('handshake: /cache on after a remote stop restores the window the session h
   expect(w.forks).toHaveLength(1)
 })
 
+test('handshake: the turn-on time is state, so a module reload keeps it and the old request stays old', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await prompt($, w, 't1')
+  expect(await st($, 'onAt')).toBeNull()
+  askStop(w, w.clock.now() + 1)
+  await w.clock.advance(5 * MINUTE)
+  expect((await st($, 'settings')).keepFor).toBe('off')
+  await cache($, 'on')
+  // $.state holds it (a reload keeps $.state and loses module variables); the session start that follows a reload does not touch it
+  expect(await st($, 'onAt')).toBe(START + 5 * MINUTE)
+  await start($)
+  expect(await st($, 'onAt')).toBe(START + 5 * MINUTE)
+  await w.clock.advance(HOUR)
+  expect((await st($, 'settings')).keepFor).toBe('8h')
+  expect(w.forks).toHaveLength(1)
+  expect(w.appended).toHaveLength(1)
+})
+
 test('handshake: a manual /cache refresh-now checks the request first, too', async ($, on) => {
   const w = world(on)
   await start($)

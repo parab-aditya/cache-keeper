@@ -82,6 +82,7 @@ export const A = {
   sheetOpen: 'sheetOpen',
   ttlSet: 'ttlSet',
   elsewhere: 'elsewhere',
+  onAt: 'onAt',
 } as const
 
 // A status change is the moment this session's live file (live.ts) may be out of date: one place, here.
@@ -118,8 +119,6 @@ const warned = new Set<string>()
 const surfaceSeen = new Set<string>()
 /** What the live file says about who this session is (the title from the classic SessionStart, the folder from session.start). */
 let ident: Ident = {}
-/** When warming was last turned on in this session (the keep chip, /cache on, a setting): a stop request older than this is ignored. Unset: the session's start. */
-let onAt: number | undefined
 let ended = false
 /** The heartbeat of the live file, armed while this session is warming. */
 let beat: Timer | undefined
@@ -132,7 +131,6 @@ export const noteIdentity = (i: Ident): void => {
 
 export function resetKeeper(): void {
   ident = {}
-  onAt = undefined
   ended = false
   beat?.cancel()
   beat = undefined
@@ -204,6 +202,8 @@ export type Snap = {
   light: boolean
   sheetOpen: boolean
   elsewhere: Elsewhere[]
+  /** When warming was last turned on in this session (the keep chip, /cache on, a setting); state, so a reload keeps it. */
+  onAt: number | null
 }
 
 export async function snapshot(io: Io): Promise<Snap> {
@@ -218,7 +218,7 @@ export async function snapshot(io: Io): Promise<Snap> {
     io.read(A.tasks),
     io.read(A.limits),
   ])
-  const [contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere] = await Promise.all([
+  const [contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere, onAt] = await Promise.all([
     io.read(A.contextTokens),
     io.read(A.costUsd),
     io.read(A.refreshing),
@@ -229,10 +229,11 @@ export async function snapshot(io: Io): Promise<Snap> {
     io.read(A.light),
     io.read(A.sheetOpen),
     io.read(A.elsewhere),
+    io.read(A.onAt),
   ])
   return {
     now, anchor, chain, status, settings, turn, dialog, tasks, limits,
-    contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere,
+    contextTokens, costUsd, refreshing, last, session, resumed, surface, light, sheetOpen, elsewhere, onAt,
   }
 }
 
@@ -445,7 +446,7 @@ async function applyUpgrade(io: Io, s: Settings, limits: Limits | null): Promise
 export async function setSettings(io: Io, patch: Partial<Settings>): Promise<void> {
   const wasOff = (await io.read(A.settings)).keepFor === 'off'
   const next = await io.update(A.settings, s => ({ ...s, ...patch }))
-  if (wasOff && next.keepFor !== 'off') onAt = await io.now()
+  if (wasOff && next.keepFor !== 'off') await put(io, A.onAt, await io.now())
   if (patch.upgradeTo1h) await applyUpgrade(io, next, await io.read(A.limits))
   // Off again: take back the variable the mod set (never one the user set).
   else if (patch.upgradeTo1h === false && (await io.read(A.ttlSet))) {
@@ -550,7 +551,7 @@ export const publish = (io: Io, force = false): Promise<void> =>
 /** Another session asked this one to stop after it last turned warming on. */
 async function remoteStopDue(io: Io): Promise<boolean> {
   const at = await stopAskedAt(io)
-  return at !== undefined && at > (onAt ?? (await io.read(A.session)).since)
+  return at !== undefined && at > ((await io.read(A.onAt)) ?? (await io.read(A.session)).since)
 }
 
 /**

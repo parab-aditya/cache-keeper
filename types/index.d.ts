@@ -181,6 +181,8 @@ declare module 'claude-code' {
       ttlSet: Shaped<boolean>
       /** The user's other live warming sessions (live/*.json), rescanned each minute while a band or pane is drawn; sorted by `seen`, then label. */
       elsewhere: Shaped<CkElsewhere[]>
+      /** When warming was last turned on (off to on) in this session; a stop request another session wrote before it is ignored. Null: not since the session started. */
+      onAt: Shaped<number | null>
     }
   }
 }
