@@ -967,3 +967,15 @@ test('a new session starts with warming off, whatever the saved window; /cache o
   await cache($, 'on')
   expect((await snap($)).settings.keepFor).toBe('4h')
 })
+
+test('changing the saved window from /config never turns warming on: an off session stays off, and On then uses the new window', async ($, on) => {
+  const w = world(on)
+  await start($, false)
+  await prompt($, w, 't1')
+  await setConfig($, 'cache-keeper.keepFor', '2h')
+  expect((await snap($)).settings.keepFor).toBe('off')
+  await w.clock.advance(2 * HOUR)
+  expect(w.forks).toHaveLength(0)
+  await cache($, 'on')
+  expect((await snap($)).settings.keepFor).toBe('2h')
+})

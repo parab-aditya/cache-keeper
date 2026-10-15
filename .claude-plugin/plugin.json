@@ -1,6 +1,6 @@
 {
   "name": "cache-keeper",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Keeps the main conversation's prompt cache warm while you are away, within a window you choose, and shows its state above the prompt.",
   "author": {
     "name": "Aditya Parab"

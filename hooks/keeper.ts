@@ -1137,6 +1137,11 @@ export async function onConfigSet(io: Io, key: string, value: unknown): Promise<
     : undefined
   if (patch) {
     await forgetKept(io, field)
+    if (patch.keepFor !== undefined) {
+      saved = { ...saved, keepFor: patch.keepFor }
+      // A new saved window never turns warming on by itself: a session that is off stays off (On then uses the new window).
+      if ((await io.read(A.settings)).keepFor === 'off') return
+    }
     await setSettings(io, patch)
   }
 }
