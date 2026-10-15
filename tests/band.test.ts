@@ -299,7 +299,7 @@ test('band: off then on keeps the window the keep chip chose', async ($, on) => 
 test('band: the toggle is on again at 8h when the saved default is off', { options: { keepFor: 'off' } }, async ($, on) => {
   const w = world(on)
   engineBand(on)
-  await start($)
+  await start($, false)
   await prompt($, w, 't1')
   const ui = await mount($, 'terminal')
   expect((await ui.find({ key: 'ck-toggle' }))?.props.label).toBe('off')

@@ -332,14 +332,14 @@ test('handshake: the turn-on time is state, so a module reload keeps it and the 
   const w = world(on)
   await start($)
   await prompt($, w, 't1')
-  expect(await st($, 'onAt')).toBeNull()
+  expect(await st($, 'onAt')).toBe(START) // the helper's /cache on
   askStop(w, w.clock.now() + 1)
   await w.clock.advance(5 * MINUTE)
   expect((await st($, 'settings')).keepFor).toBe('off')
   await cache($, 'on')
   // $.state holds it (a reload keeps $.state and loses module variables); the session start that follows a reload does not touch it
   expect(await st($, 'onAt')).toBe(START + 5 * MINUTE)
-  await start($)
+  await start($, false) // a reload
   expect(await st($, 'onAt')).toBe(START + 5 * MINUTE)
   await w.clock.advance(HOUR)
   expect((await st($, 'settings')).keepFor).toBe('8h')

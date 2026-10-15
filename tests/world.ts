@@ -265,7 +265,11 @@ export const world = (on: On, o: WorldOptions = {}) => {
 
 export type World = ReturnType<typeof world>
 
-export const start = ($: Engine) => $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+/** Starts the session; a new session starts with warming off, so most tests turn it on as the user would (`warm: false` leaves it off). */
+export const start = async ($: Engine, warm = true) => {
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  if (warm) await cache($, 'on')
+}
 
 const drain = async ($: Engine, turnId: string, model: string) => {
   for await (const _ of $.turn.step({ turnId, index: 0, model, messageCount: 1 })) {

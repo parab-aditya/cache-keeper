@@ -408,7 +408,7 @@ test('11b. a reload keeps what the session changed; the options only seed it the
   await start($)
   expect((await snap($)).settings).toMatchObject({ keepFor: '4h', leadMin: 10, minTokens: 30_000 })
   await cache($, 'keep 2h')
-  await start($)
+  await start($, false) // a reload
   expect((await snap($)).settings.keepFor).toBe('2h')
   await prompt($, w, 't1')
   await w.clock.advance(50 * MINUTE)
@@ -955,4 +955,15 @@ test('totals saved before grossUsd carry over with their net: gross = net + cost
   await prompt($, w, 't2', turnUsage(OPUS, 399_000, 1_000))
   expect(w.stored.get('allTime')).toMatchObject({ refreshes: 9, avoided: 3 })
   expect(Math.abs((w.stored.get('allTime') as { grossUsd: number }).grossUsd - (3.5 + rewriteUsd(OPUS, 399_000, '1h'))) < 1e-9).toBe(true)
+})
+
+test('a new session starts with warming off, whatever the saved window; /cache on then uses the saved window', { options: { keepFor: '4h' } }, async ($, on) => {
+  const w = world(on)
+  await start($, false)
+  expect((await snap($)).settings.keepFor).toBe('off')
+  await prompt($, w, 't1')
+  await w.clock.advance(2 * HOUR)
+  expect(w.forks).toHaveLength(0)
+  await cache($, 'on')
+  expect((await snap($)).settings.keepFor).toBe('4h')
 })

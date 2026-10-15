@@ -1,6 +1,6 @@
 {
   "name": "cache-keeper",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Keeps the main conversation's prompt cache warm while you are away, within a window you choose, and shows its state above the prompt.",
   "author": {
     "name": "Aditya Parab"
@@ -21,7 +21,7 @@
     "keepFor": {
       "type": "string",
       "title": "Keep the cache warm for",
-      "description": "How long after your last message the cache is refreshed before it expires. off stops warming.",
+      "description": "How long the cache is kept warm after your last message, once you turn warming on (every session starts off).",
       "default": "8h",
       "options": [
         "off",

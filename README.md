@@ -97,6 +97,8 @@ Nothing to do: it starts when the first request of a chat has been made, and ref
 
 It also says so when a chat is too small to bother with ("not kept warm") and when you are on the 5-minute cache and nothing is running.
 
+Every new session starts with auto-refresh **off**: nothing is refreshed until you turn it on (the switch, or `/cache on`), which then keeps the cache warm for your saved window.
+
 Controls (desktop): the switch turns auto-refresh on and off for this session; the chip shows the window (`2h`, `4h`, `8h`, `12h` or `∞`) and cycles through them when pressed; the gear opens the settings sheet. Hover the line to see when the cache expires. When other sessions of yours are warming too, a small ember chip with their count (a flame and a number) sits beside the keep chip; press it to open the list. On the terminal it is a dim `+2 warming elsewhere` after the line. In the sheet, **Save as default** writes your session's choices to the `/config` rows.
 
 **`/cache`** (bare `/cache` is `status`):
@@ -119,7 +121,7 @@ Controls (desktop): the switch turns auto-refresh on and off for this session; t
 
 | Row | Options | Default |
 |---|---|---|
-| `keepFor`: keep the cache warm for | off, 2h, 4h, 8h, 12h, forever | 8h |
+| `keepFor`: keep the cache warm for, once you turn warming on (sessions always start off) | off, 2h, 4h, 8h, 12h, forever | 8h |
 | `lead`: refresh this many minutes before expiry | 2, 3, 5, 10, 15 | 5 |
 | `minTokens`: skip contexts smaller than | 10000, 30000, 50000, 100000 | 30000 |
 | `weeklyGuard`: stop at weekly usage % | 50, 75, 80, 90, 95, 100 | 90 |

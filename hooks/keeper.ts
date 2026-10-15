@@ -367,7 +367,8 @@ export async function start(io: Io, options: Readonly<Record<string, unknown>>, 
   // The session's settings come from the options only the first time (session.since marks it); a reload keeps
   // what the session changed.
   if ((await io.read(A.session)).since === 0) {
-    await put(io, A.settings, defaults)
+    // A new session never warms on its own: the user turns it on (the band's switch or /cache on), which then uses the saved window.
+    await put(io, A.settings, { ...defaults, keepFor: 'off' })
     await io.update(A.session, t => ({ ...t, since: now }))
   }
   const claim = await io.read(A.refreshing)
@@ -716,7 +717,8 @@ export async function stop(
     await put(io, A.status, {
       kind: 'stopped', code, reason, at: s.now, ...(coldSince !== undefined ? { coldSince } : {}),
     })
-    await logLine(io, 'stop', { code, reason, ...summary(s) })
+    // A session that starts off (the default) has kept nothing yet: no stop line for it.
+    if (code !== 'user-off' || s.chain) await logLine(io, 'stop', { code, reason, ...summary(s) })
   }
   if (forget) await Promise.all([put(io, A.anchor, null), put(io, A.chain, null)])
   if (!again && !NO_NOTICE.has(code)) await notice(io, s, `stopped: ${reason}`)
