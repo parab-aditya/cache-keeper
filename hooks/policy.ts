@@ -528,7 +528,10 @@ export function bandLine(x: LineInput, style: 'full' | 'minimal' = 'full', tier:
       ? out(cooling ? '◐' : '○', tone, seg('Auto-refresh off · cache expires in', warmLeft), seg('Off · expires', warmLeft), seg('off', warmLeft), 'off', OFF_WORDS)
       : out('○', tone, seg('Auto-refresh off'), seg('Off'), seg('off'), 'off', OFF_WORDS)
   }
-  if (!anchor && status.kind !== 'stopped') return null
+  // On, but no message seen yet (a new chat, or the mod started fresh in an old one): say so rather than vanish.
+  const pending = (): Line =>
+    out('○', 'dim', seg('Auto-refresh on · starts with your next message'), seg('On · starts next message'), seg('on'), 'on', ['Auto-refresh on', 'On', 'on'])
+  if (!anchor && status.kind !== 'stopped') return pending()
   switch (status.kind) {
     case 'refreshing':
       return out('◌', 'refreshing', seg('Refreshing…'), seg('Refreshing…'), seg('refresh'), 'refreshing', ['Refreshing', 'refresh'])
@@ -560,7 +563,7 @@ export function bandLine(x: LineInput, style: 'full' | 'minimal' = 'full', tier:
     }
     default: {
       // scheduled, or waiting with an anchor (a main request just landed)
-      if (!anchor || !chain) return null
+      if (!anchor || !chain) return pending()
       const next = (status.kind === 'scheduled' ? status.nextAt : nextRefreshAt(chain, anchor.ttl, settings.leadMin)) - now
       const extra = [x.dialog ? '· waiting on your answer' : '', x.tasks.length > 0 ? `· ${plural(x.tasks.length, 'background task')}` : ''].filter(Boolean).join(' ')
       return out('●', 'warm', seg('Warm · next refresh in', next, extra), seg('Warm · refresh', next), seg('', next), 'warm', ['Warm'])

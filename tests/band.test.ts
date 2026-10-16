@@ -182,15 +182,19 @@ for (const sc of SCENARIOS)
     await after?.()
   })
 
-test('band: nothing to say before the first request: only the engine band', async ($, on) => {
+test('band: before the first request it still shows, with the switch: off, or on and waiting for the next message (it never vanishes)', async ($, on) => {
   world(on)
   engineBand(on)
-  await start($)
+  await start($, false)
   for (const surface of SURFACES) {
     const ui = await mount($, surface)
-    expect(await ui.find({ text: 'engine band' })).toBeDefined()
-    expect(await ui.find({ key: 'ck-band' })).toBeUndefined()
-    expect(await buttons(ui)).toEqual([])
+    expect(await ui.find({ text: 'Auto-refresh off' })).toBeDefined()
+    await ui.unmount()
+  }
+  await cache($, 'on')
+  for (const surface of SURFACES) {
+    const ui = await mount($, surface)
+    expect(await ui.find({ text: 'Auto-refresh on · starts with your next message' })).toBeDefined()
     await ui.unmount()
   }
 })

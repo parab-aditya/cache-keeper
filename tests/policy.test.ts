@@ -406,8 +406,8 @@ test('bandLine: cold, missed, resumed, nothing to say', () => {
   expect(coldDetail(input({ now: T + 2 * HOUR, status: { kind: 'refreshing', since: 0, attempt: 0 } }))).toBeNull()
   expect(line({ now: T + 2 * HOUR, pct5h: 1.4 })).toBe(`${cold} · ~1.4% of 5h`)
   expect(line({ now: T + 2 * HOUR, status: { kind: 'refreshing', since: 0, attempt: 0 } })).toBe('◌ Refreshing…')
-  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' } })).toBeNull()
-  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' }, resumed: { tokens: 408_000, cold: false } })).toBeNull()
+  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' } })).toBe('○ Auto-refresh on · starts with your next message')
+  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' }, resumed: { tokens: 408_000, cold: false } })).toBe('○ Auto-refresh on · starts with your next message')
   expect(line({ anchor: null, chain: null, status: { kind: 'waiting' }, resumed: { tokens: 408_000, estUsd: 3.26, cold: true } })).toBe(
     '❄ Cache cold · next message rewrites 408k (~$3.26)',
   )
@@ -416,9 +416,9 @@ test('bandLine: cold, missed, resumed, nothing to say', () => {
 
 test('bandLine: an anchor without a chain (or a chain without an anchor) counts as no anchor', () => {
   // left behind by another version of the code: it used to print "expires " with nothing after it
-  expect(line({ chain: null, status: { kind: 'waiting' } })).toBeNull()
-  expect(line({ anchor: null, status: { kind: 'scheduled', nextAt: T + HOUR } })).toBeNull()
-  expect(line({ chain: null, status: { kind: 'scheduled', nextAt: T + HOUR } })).toBeNull()
+  expect(line({ chain: null, status: { kind: 'waiting' } })).toBe('○ Auto-refresh on · starts with your next message')
+  expect(line({ anchor: null, status: { kind: 'scheduled', nextAt: T + HOUR } })).toBe('○ Auto-refresh on · starts with your next message')
+  expect(line({ chain: null, status: { kind: 'scheduled', nextAt: T + HOUR } })).toBe('○ Auto-refresh on · starts with your next message')
   expect(line({ chain: null, status: { kind: 'waiting' }, resumed: { tokens: 408_000, estUsd: 3.26, cold: true } })).toBe('❄ Cache cold · next message rewrites 408k (~$3.26)')
   expect(coldDetail(input({ chain: null, now: T + 5 * HOUR }))).toBeNull()
   // decide waits for a request instead of acting on half a pair
@@ -459,7 +459,7 @@ test('bandLine: minimal style', () => {
   expect(line({ now: T + 2 * HOUR }, 'minimal')).toBe('❄ cold')
   expect(line({ settings: { ...DEFAULT_SETTINGS, keepFor: 'off' } }, 'minimal')).toBe('○ off')
   expect(line({ status: { kind: 'refreshing', since: 0, attempt: 0 } }, 'minimal')).toBe('◌ refreshing')
-  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' } }, 'minimal')).toBeNull()
+  expect(line({ anchor: null, chain: null, status: { kind: 'waiting' } }, 'minimal')).toBe('○ on')
 })
 
 test('fmtMinutes labels a minute countdown: whole minutes, hours, and now under half a minute', () => {

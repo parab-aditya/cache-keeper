@@ -665,7 +665,7 @@ test('15d. refresh-now forks at once and moves the schedule; it refuses while of
 test('15e. status, stats, settings, debug and bare /cache answer', async ($, on) => {
   const w = world(on)
   await start($)
-  expect((await cache($, '')).text).toContain('No cache to keep yet')
+  expect((await cache($, '')).text).toContain('starts with your next message')
   await prompt($, w, 't1')
   await w.clock.advance(55 * MINUTE)
   const status = (await cache($, 'status')).text ?? ''
@@ -840,7 +840,7 @@ test('A1. state another version wrote reads as absent; a lone anchor says nothin
   const s = await snap($)
   expect(s.anchor).toBeNull()
   expect(s.status).toEqual({ kind: 'waiting' })
-  expect((await cache($, 'status')).text).toContain('No cache to keep yet')
+  expect((await cache($, 'status')).text).toContain('starts with your next message')
   // a value under the current tag reads; one under another tag does not
   stored.anchor = { shape: 'ck2', value: OLD_ANCHOR }
   expect((await snap($)).anchor).toMatchObject({ promptTokens: 400_000 })
@@ -854,13 +854,13 @@ test('A1. state another version wrote reads as absent; a lone anchor says nothin
   // an anchor without a chain (a version that kept them apart): no half-empty line, no refresh
   stored.anchor = { shape: 'ck2', value: OLD_ANCHOR }
   stored.status = { shape: 'ck2', value: { kind: 'waiting' } }
-  expect((await cache($, 'status')).text).toContain('No cache to keep yet')
+  expect((await cache($, 'status')).text).toContain('starts with your next message')
   await w.clock.advance(2 * HOUR)
   expect(w.forks).toHaveLength(0)
   // a chain without an anchor is the same
   delete stored.anchor
   stored.chain = { shape: 'ck2', value: { touchAt: START, refreshes: 0, costUsd: 0 } }
-  expect((await cache($, 'status')).text).toContain('No cache to keep yet')
+  expect((await cache($, 'status')).text).toContain('starts with your next message')
   // and the next request starts clean
   delete stored.chain
   delete stored.status
