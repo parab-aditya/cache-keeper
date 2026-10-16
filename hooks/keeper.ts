@@ -466,7 +466,17 @@ export async function warmingOn(io: Io): Promise<KeepFor> {
   const keepFor = lastOn ?? (saved.keepFor === 'off' ? '8h' : saved.keepFor)
   lastOn = null
   await setSettings(io, { keepFor })
+  const blocked = await guardBlock(io)
+  if (blocked) io.toast(`cache-keeper: ${blocked}`)
   return keepFor
+}
+
+/** Why warming that was just turned on stopped at once: the weekly guard. Undefined when it is warming. */
+export async function guardBlock(io: Io): Promise<string | undefined> {
+  const s = await snapshot(io)
+  if (s.status.kind !== 'stopped' || s.status.code !== 'weekly-guard') return undefined
+  const used = s.limits?.weekly
+  return `Can't warm: weekly usage${used !== undefined ? ` ${Math.round(used)}%` : ''} is over your ${s.settings.weeklyGuard}% guard. Raise "Stop at weekly usage" in settings to warm anyway.`
 }
 
 /** The band's switch: off stops warming for the session; on goes back to the saved window. */

@@ -979,3 +979,14 @@ test('changing the saved window from /config never turns warming on: an off sess
   await cache($, 'on')
   expect((await snap($)).settings.keepFor).toBe('2h')
 })
+
+test('turning warming on above the weekly guard says why at once (toast and /cache on reply) instead of looking like nothing happened', async ($, on) => {
+  const w = world(on)
+  await start($, false)
+  await prompt($, w, 't1')
+  await measure($, w, { fiveHour: 9, weekly: 97 })
+  const reply = (await cache($, 'on')).text
+  expect(reply).toContain("Can't warm: weekly usage 97% is over your 90% guard")
+  expect(w.toasts.at(-1)).toContain("Can't warm: weekly usage 97% is over your 90% guard")
+  expect(w.forks).toHaveLength(0)
+})

@@ -16,6 +16,7 @@ import {
   themeLine,
   toggleWarming,
   ttlExplain,
+  guardBlock,
   warmingOn,
 } from './keeper'
 import type { Snap } from './keeper'
@@ -134,6 +135,8 @@ export async function runCommand(io: Io, args: string): Promise<{ text: string }
     case 'on':
     case 'resume': {
       const keepFor = await warmingOn(io)
+      const blocked = await guardBlock(io)
+      if (blocked) return say(blocked)
       return say(`Warming on: ${keepFor === 'forever' ? 'no end' : `${keepFor} after each message`}.`)
     }
     case 'off':
