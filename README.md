@@ -1,75 +1,94 @@
 # cache-keeper
 
-A Claude Code mod that keeps a chat's prompt cache warm while you are away, and shows its state in a band above the prompt.
+**Stop paying full price every time you come back to a long Claude Code chat.**
 
-Claude Code caches your conversation so each new message only pays a small "cache read" for the old part. The cache expires after an idle period: 1 hour on Pro and Max plans, 5 minutes on API keys. Leave a chat for a lunch break or overnight (a question waiting for your answer, a long background job) and your next message writes the whole conversation into the cache again at full price. On a long chat that one message can cost a few percent of a weekly limit. cache-keeper sends a tiny refresh shortly before the cache would expire, for as long as you choose (8 hours by default), so the next message is a cheap read again. It adds nothing to the conversation.
+cache-keeper keeps your chat's memory warm while you're away, with one tiny refresh before it expires.
 
 ![The band above the prompt cycling through its states: Warm with embers rising and the next refresh counting down, Warm with the ember chip counting 2 other warming sessions, Refreshing with a shimmer, Cooling in an amber alert when auto-refresh is off, and Cold with frost and snowflakes](docs/states.gif)
 
-The band's states: warm (embers rise while the next refresh counts down), warm with the ember chip (2 other sessions are warming too), refreshing (a shimmer while the refresh is sent), cooling (auto-refresh is off and the cache is about to expire) and cold (it expired; the next message rewrites the chat).
-
-The gear opens the settings sheet (shown with sample figures, dark and light). Pointing at a setting shows what it does:
-
 ![The settings sheet, dark then light: keep warm for, refresh before it expires, skip chats smaller than, stop at weekly usage, with each setting's help shown as the pointer moves over it](docs/settings.gif)
 
-## Requirements
+## Why you'd want this
 
-- Claude Code in a terminal 2.1.287 or newer, or the Claude desktop app 2.1.286 or newer (mods are on by default from those versions). Built and tested on 2.1.295 and 2.1.296. There is no minimum-version field in a plugin, so this is the floor to check yourself.
-- macOS, Linux or Windows in a terminal, or the desktop app's Code tab. Not in WSL sessions or cloud sessions.
-- Organisations that allow only managed mods (`allowManagedModsOnly`) block mods from a marketplace.
-- The band's art and the settings sheet are drawn in the desktop app only. The terminal gets one quiet line with small buttons (`k` keep, `o` on/off, `s` settings); `/cache settings` opens a settings pane there when the window has room.
+**The problem**
+
+- Claude keeps your chat in a memory called the **cache**. Reusing it is very cheap.
+- In the Claude Code app and CLI (Pro and Max plans), that memory is wiped after **1 hour** without a message.
+- After that, your next message sends the **whole chat again**, at more than full price.
+
+**When it bites**
+
+- **You step away.** A meeting, lunch, or you just forget to reply for an hour.
+- **Long background tasks.** Claude starts a build, a test run or some agents that take over an hour. The main chat sits idle. When the task finishes, the whole chat is sent again.
+
+**The prices** (from Anthropic's [pricing](https://platform.claude.com/docs/en/about-claude/pricing) and [prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) pages, per 1 million tokens)
+
+| | Opus 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Normal input | $4 | $2 |
+| Rebuilding the memory (1-hour cache) | **$8** | **$4** |
+| Reading a warm memory | **$0.20** | **$0.10** |
+
+👉 **Rebuilding costs 40× more than reading.**
+
+**What cache-keeper does**
+
+- A little before the hour runs out, it sends one tiny "keep this alive" request.
+- That costs about one warm read: a few cents.
+- Your memory stays warm. Your next message is cheap.
+
+## How much it saves
+
+Examples use a 50/50 mix of Opus 5.5 and Sonnet 5.5, at list prices.
+
+**One break: a 600k-token chat, you're away 3 hours**
+
+| | Without | With cache-keeper |
+|---|---|---|
+| What happens | the whole chat is rebuilt | 3 tiny refreshes |
+| Cost | **$3.60** | **$0.27** |
+
+**A heavy day: the memory would expire 4 times, about 2 hours each, on a 600k chat**
+
+| | Without | With cache-keeper |
+|---|---|---|
+| Per day | $14.40 | ~$0.72 |
+| Per month (22 workdays) | **~$317** | **~$16** |
+
+On a 700k chat: about **$4.20** per rebuild against about **$0.11** per refresh.
+
+On a Pro or Max plan you don't pay these dollars directly. But the same rebuild eats into your **usage limits**, often a few percent of your week in one message.
+
+## Who it's for
+
+- ✅ Claude Code **desktop app or CLI** users with long chats (100k+ tokens).
+- ✅ People who take breaks, or run long background tasks.
+- ⚠️ **API keys:** the memory lasts only 5 minutes there. cache-keeper keeps it warm only while Claude is working, not while you're idle. (There's an option to switch to the 1-hour cache.)
+- ❌ Not needed for short chats, or if you always reply within the hour.
 
 ## Install
 
-In a Claude Code session (terminal 2.1.275 or newer), one line:
+In Claude Code:
 
 ```
 /plugin install cache-keeper --marketplace parab-aditya/cache-keeper
 ```
 
-Answer `y` to add the marketplace, pick a scope (user is the first), and set the options if you want to. Or in two steps:
-
-```
-/plugin marketplace add parab-aditya/cache-keeper
-/plugin install cache-keeper@heycache
-```
-
-From a shell (terminal 2.1.292 or newer, one line; the user scope is the default):
+Or from a shell:
 
 ```
 claude plugin install cache-keeper --marketplace parab-aditya/cache-keeper
 ```
 
-or in two steps:
+Then start a new session.
 
-```
-claude plugin marketplace add parab-aditya/cache-keeper
-claude plugin install cache-keeper@heycache
-```
+**Desktop app:** `+` next to the prompt → Plugins → Add plugin → cache-keeper (add `parab-aditya/cache-keeper` as a marketplace first if it isn't listed).
 
-If it says options are not set, that is fine: the defaults below apply. Change them with `/config` or `/plugin configure cache-keeper@heycache`.
+**Update:** `claude plugin marketplace update heycache && claude plugin update cache-keeper@heycache`, then a new session.
 
-In the desktop app: click `+` next to the prompt, then Plugins, then Add plugin, and pick cache-keeper from the marketplace list (add `parab-aditya/cache-keeper` as a marketplace first if it is not listed). A plugin installed at user scope from a terminal also loads in the desktop app's local sessions. Then start a new session.
+**Uninstall:** `claude plugin uninstall cache-keeper@heycache`, then `claude plugin marketplace remove heycache`.
 
-**Update.** The version in `plugin.json` has to change for an update to install:
-
-```
-claude plugin marketplace update heycache
-claude plugin update cache-keeper@heycache
-```
-
-Then run `/reload-plugins` or start a new session (the desktop app loads an update only in a new session). Auto-update is off by default for third-party marketplaces; turn it on under `/plugin`, Marketplaces, Enable auto-update.
-
-**Uninstall.**
-
-```
-claude plugin uninstall cache-keeper@heycache
-claude plugin marketplace remove heycache
-```
-
-Run the second line only when nothing else from heycache is installed. The per-session logs are in `~/.claude/cache-keeper/`; delete that folder to remove them.
-
-**For a team.** Put this in the project's `.claude/settings.json` and everyone who trusts the folder is offered the plugin:
+**For a team:** add this to the project's `.claude/settings.json`:
 
 ```json
 {
@@ -80,91 +99,98 @@ Run the second line only when nothing else from heycache is installed. The per-s
 }
 ```
 
-## Using it
+Needs Claude Code 2.1.287+ in a terminal, or the desktop app 2.1.286+. Not in WSL or cloud sessions.
 
-Nothing to do: it starts when the first request of a chat has been made, and refreshes until the keep-warm window (counted from your last message) ends.
+## How to use it
 
-**The band** has one line and a few controls.
+1. **It's off by default.** Every new session starts off, so it never spends anything unless you turn it on.
+2. **Turn it on** with the switch on the band, or `/cache on`.
+3. **Pick how long** to keep it warm with the chip: 2h, 4h, 8h (default), 12h or ∞.
+4. **That's it.** It refreshes until that time has passed since your last message, then stops.
+
+**The band** above the prompt shows what's happening:
 
 | State | Meaning |
 |---|---|
-| warm | cache is kept; shows when the next refresh is due (and "waiting on your answer" or "N background tasks" when that is why you are away) |
-| refreshing | a refresh is running (a failed one shows "retrying in ...") |
-| off | auto-refresh is off for this session; the cache still has some time left |
-| cooling | off, finished or stopped, and the cache expires in 10 minutes or less (a third of the lifetime on the 5-minute cache): the colour turns to an alert |
-| cold | the cache has expired; shows what your next message will rewrite: tokens, an estimated cost, and the share of your 5-hour limit once the mod has learned it |
-| stopped | warming stopped, with the reason (weekly guard, rate limit, API error, a refresh missed while the Mac slept, the prompt changed, model switched, conversation compacted or cleared). A finished window reads "Kept warm for 8h" |
+| 🔥 warm | memory is kept warm; shows the next refresh |
+| ✨ refreshing | a refresh is being sent |
+| ⏸ off | warming is off for this session |
+| 🟠 cooling | off or finished, and the memory expires within 10 minutes |
+| ❄️ cold | memory expired; shows what your next message will cost |
+| ⏹ stopped | it stopped, and says why |
 
-It also says so when a chat is too small to bother with ("not kept warm") and when you are on the 5-minute cache and nothing is running.
+The **gear** opens settings. Hover any setting to see what it does.
 
-Every new session starts with auto-refresh **off**: nothing is refreshed until you turn it on (the switch, or `/cache on`), which then keeps the cache warm for your saved window.
+The terminal gets one quiet line with small buttons: `k` keep, `o` on/off, `s` settings.
 
-Controls (desktop): the switch turns auto-refresh on and off for this session; the chip shows the window (`2h`, `4h`, `8h`, `12h` or `∞`) and cycles through them when pressed; the gear opens the settings sheet. Hover the line to see when the cache expires. When other sessions of yours are warming too, a small ember chip with their count (a flame and a number) sits beside the keep chip; press it to open the list. On the terminal it is a dim `+2 warming elsewhere` after the line. In the sheet, **Save as default** writes your session's choices to the `/config` rows.
+### Forgot a session was warming?
 
-**`/cache`** (bare `/cache` is `status`):
+- A small 🔥 with a number on the band means **other sessions** are warming too. Press it to see them.
+- Each one shows its sidebar name, how long it's been idle and what it has cost. Press **Stop** on any of them.
+- A session you **archive or delete** stops warming on its own.
+
+### Commands
 
 | Command | What it does |
 |---|---|
-| `/cache status` | the band line plus the details: cache lifetime and why, last request, expiry, next refresh, window, background tasks, limits, last refresh |
-| `/cache on` | warm again, for the window it had before `off` (else the saved window, 8h unless you changed it) |
-| `/cache off` | stop auto-refresh for this session (`pause` and `resume` do the same as off and on) |
-| `/cache keep <2h\|4h\|8h\|12h\|forever> [--save]` | the window for this session; `--save` also makes it the default |
-| `/cache lead <2-15> [--save]` | refresh this many minutes before the 1-hour cache expires (the 5-minute cache is refreshed 30 seconds before). `--save` only takes 2, 3, 5, 10 or 15 |
-| `/cache refresh-now` | refresh at once, if the usual guards allow it |
-| `/cache stats` | refreshes made, what they cost, rewrites avoided and what that saved: this session and all time |
-| `/cache settings` | open the settings (the sheet on the desktop band, else a pane) |
-| `/cache sessions` | your other sessions that are keeping the cache warm, numbered: name, folder, state, how long it is kept, next refresh, how long since its last message, what its refreshes have cost |
-| `/cache stop <n\|all>` | ask one of those sessions (by its number in `/cache sessions`), or all of them, to stop warming. It stops before its next refresh; `/cache on` in that session turns it back on |
-| `/cache debug` | state dump and the last lines of this session's log |
+| `/cache` | status |
+| `/cache on` / `off` | turn warming on or off for this session |
+| `/cache keep 2h` | keep warm for 2h, 4h, 8h, 12h or `forever` (add `--save` to make it your default) |
+| `/cache stats` | what it spent and what it saved: this session and all time |
+| `/cache sessions` | your other sessions that are warming |
+| `/cache stop 2` / `stop all` | stop one of them, or all |
+| `/cache settings` | open settings |
+| `/cache refresh-now` | refresh right now |
+| `/cache debug` | details, for troubleshooting |
 
-**Settings** are `/config` rows named `cache-keeper.*`, or `/plugin configure cache-keeper@heycache`:
+### Settings
 
-| Row | Options | Default |
+Change them in the settings sheet, or with `/config` (rows named `cache-keeper.*`).
+
+| Setting | Default | What it does |
 |---|---|---|
-| `keepFor`: keep the cache warm for, once you turn warming on (sessions always start off) | off, 2h, 4h, 8h, 12h, forever | 8h |
-| `lead`: refresh this many minutes before expiry | 2, 3, 5, 10, 15 | 5 |
-| `minTokens`: skip contexts smaller than | 10000, 30000, 50000, 100000 | 30000 |
-| `weeklyGuard`: stop at weekly usage % | 50, 75, 80, 90, 95, 100 | 90 |
-| `band`: band above the prompt | full, minimal, off | full |
-| `upgradeTo1h`: use the 1-hour cache on API-key sessions | off, on | off |
+| Keep warm for | 8h | how long after your last message it keeps warming, once you turn it on |
+| Refresh before it expires | 5 min | how early it refreshes before the hour is up |
+| Skip chats smaller than | 30k tokens | small chats are cheap to rebuild, so they're skipped |
+| Stop at weekly usage | 90% | stops warming when your weekly plan usage hits this |
+| Band | full | full, minimal (one line) or off |
+| 1-hour cache for API keys | off | switch API-key sessions to the 1-hour cache |
 
-**Warming in your other sessions.** Turning warming on and forgetting it costs refreshes nobody needs, so every session tells the others whether it is warming. `/cache sessions`, the band's ember chip and the settings pane's "Warming elsewhere" section list the sessions that are, each with a Stop button there (and "Stop all" from two). Stopping a session works exactly like `/cache off` in it: it checks for the request right before every refresh and every five minutes, stops, adds its one dim notice ("stopped from another session"), and `/cache on` there restores its window. A request older than the last time warming was turned on in that session is ignored, so turning it back on wins. Deleting a session in the desktop app ends it, and with it the warming; a session the app archives (or whose record disappears) stops the same way, with the notice "session archived" or "session deleted", checked before every refresh and every five minutes. The list covers sessions of the same user on the same Mac; one that stopped being heard from for 12 minutes (an app that quit) is not listed.
+## Good to know
 
-Background tasks (a long shell command, a monitor, a sub-agent) that are still running stretch the window to 24 hours from your last message, so a task that wakes Claude finds a warm cache. On the 5-minute cache, refreshing an idle chat every 4.5 minutes barely pays, so it is refreshed only while Claude is working, for up to an hour; turn on `upgradeTo1h` to move such a session to the 1-hour cache (the first message after that writes the cache once, at the higher 1-hour price).
-
-## What it costs
-
-One refresh is one cached read of the conversation plus a few output tokens. Measured on Claude Code 2.1.295 with Opus 5.5: a single request, about 4 output tokens, and about $0.08 for a 400k-token conversation, around 1/40 of what rewriting that cache costs (on models whose cache read is a tenth of the input price, about 1/20). Refreshes count toward your plan usage at about that read price. Two settings limit them: the weekly guard stops warming when your weekly plan usage reaches the percent you set (when your plan reports one), and the small-chat skip leaves contexts under 30k tokens alone. `/cache stats` shows what you spent and what you saved. Dollar figures are estimates at API list prices; on a Pro or Max plan they are usage, not billing.
+- **Background tasks** still running keep it warming for up to 24 hours, so Claude finds a warm memory when the task wakes it.
+- **It stops on its own** when the time runs out, at your weekly limit, on a rate limit or error, or when the chat is compacted, cleared or switches model.
+- **A sleeping Mac misses refreshes.** The band tells you when that happens. There's no keep-awake.
+- **One refresh** is one cheap read plus about 4 output tokens. We measured about **$0.08** on a 400k Opus chat.
+- **All dollar figures are estimates** at list prices.
 
 ## What it touches
 
-- **Reads:** the session's token usage and plan limits; the session's settings (`promptCacheTtl`) and three environment variables (`FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL`, `ENABLE_PROMPT_CACHING_1H`) to know the cache lifetime; the `theme` setting; main-thread tool calls and their results, permission prompts and background-task notifications, to know when a background task is running or you are being asked something (the first 80 characters of a background command or description are kept in session state for `/cache status` and `/cache debug`, never logged); and whether the session uses a plan or an API key (the kind only, never the key or token). When the theme is `auto` it reads the Claude desktop app's appearance (`~/Library/Application Support/Claude/config.json`, the `userThemeMode` key only) and, if that does not say, runs `defaults read -g AppleInterfaceStyle` on macOS, to match light and dark. In a terminal it assumes dark and reads neither, except possibly once at session start, before it knows it is in a terminal. On the desktop it also reads this session's own file in `~/Library/Application Support/Claude/claude-code-sessions/` (its `cliSessionId`, `title` and `isArchived` only; found among the most recently used files, then re-read at most once a minute) so the session list shows the sidebar's title and an archived or deleted session stops warming. It looks in every `Claude*` app folder there, so a second app profile is covered.
-- **Writes:** one log file per session, `~/.claude/cache-keeper/<session-id>.jsonl` (capped at about 2 MB): token counts, cost, result and reason of each refresh, never conversation text. Totals, learned rates and saved defaults in the plugin's own store. The plugin's own `cache-keeper.*` config rows when you press Save as default. It may set `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` for its own process and the commands it starts afterwards (a nested `claude` included), only when `upgradeTo1h` is on; turning that option off unsets it again.
-- **Registry:** `~/.claude/cache-keeper/live/<session-id>.json`, one small file per session, written by that session only: its title as the desktop sidebar shows it (or its folder's name), folder, whether it is warming, its state, the window's end, the next refresh time, when you last sent a message, context size, what its refreshes cost and when it last wrote. No conversation text. Your other sessions read these files (and only these: the same user, the same machine) to list who is warming; a session never stops warming because of a file except as below. A session that is asked to stop reads `live/<session-id>.stop.json`, written by another session of yours with a time and its own id, and stops warming like `/cache off`. Files stay after a session ends (they say it is not warming); delete the folder to remove them. A session writes its file when its state or settings change and every five minutes while warming, and looks at the others' files every minute while a band or pane is showing.
-- **Sends:** nothing anywhere except the refresh requests, which go to the same model the session uses. A refresh re-sends the conversation (read from the cache) with one extra message: "[cache-keeper] Automated prompt-cache refresh from the cache-keeper plugin, not a message from the user. ... Reply with only the word: ok". The reply is discarded. The refresh runs with every tool denied and is not added to the conversation.
-- **Adds to the conversation:** one dim notice row when warming stops (not sent to the model), for example "cache-keeper · kept warm 7h52m · 9 refreshes · $0.72 · stopped: ...".
+- **Sends:** only the refresh requests, to the same model your session uses. A refresh adds one hidden line asking Claude to reply "ok". The reply is thrown away, no tools can run, and nothing is added to your chat.
+- **Adds to your chat:** one dim note when warming stops (Claude never sees it).
+- **Reads:** your session's token usage, plan limits and cache settings; the theme; whether the session uses a plan or an API key (never the key itself); and when background tasks run or Claude is asking you something. To match light and dark, the desktop app's appearance setting, or macOS's (`defaults read -g AppleInterfaceStyle`). On the desktop, your session's own record in the app (`~/Library/Application Support/Claude*/claude-code-sessions/`): its title and whether it's archived.
+- **Writes, all on your machine:**
+  - a small log per session in `~/.claude/cache-keeper/` (numbers only, never your chat);
+  - one status file per session in `~/.claude/cache-keeper/live/`, which your other sessions read to show who's warming (a Stop writes a small `.stop.json` there);
+  - totals and saved settings in the plugin's own store.
+- **Sets** `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` only if you turn on the 1-hour option, and unsets it when you turn it off.
 
-## Limits
-
-- A sleeping Mac misses refreshes. The band then says "refresh missed while asleep" and when the cache went cold. There is no keep-awake.
-- `/compact`, `/clear`, a model switch, a change to the MCP tool list or a Claude Code upgrade reset the cache whatever this mod does; it stops warming and starts again with your next message. A refresh that finds the cache already cold stops too.
-- The desktop app loads a plugin update only in a new session.
-- Dollar and percent figures are estimates.
+Delete `~/.claude/cache-keeper/` to remove all its files.
 
 ## Development
 
-From another directory (for example `cd /tmp`), because the commands read the current folder as a project:
+Run from another folder (for example `cd /tmp`):
 
 ```
 claude plugin validate <path-to-this-folder>
 claude plugin test <path-to-this-folder>
 ```
 
-`npx -y tsx tools/preview.ts` writes `docs/preview.html`, a page that draws the band and the settings sheet in every state from the real modules. `node tools/record-gifs.mjs` films the same page into `docs/states.gif` and `docs/settings.gif` (needs ffmpeg; Playwright's Chromium is fetched on the fly).
+`npx -y tsx tools/preview.ts` draws every state into `docs/preview.html`. `node tools/record-gifs.mjs` records the GIFs (needs ffmpeg).
 
 ## Credits and licence
 
-- The refresh technique (`$.model.fork`), the anchor and outcome rules, and the test world are adapted from [claude-code-cache-warmer](https://github.com/paulbkim-dev/claude-code-cache-warmer) by Paul B. Kim (MIT).
-- The band's structure, the drawn controls, the art techniques and the saved-defaults pattern are adapted from [effortless](https://github.com/HeyCubit/effortless) by HeyCubit (MIT).
+- The refresh technique and test setup are adapted from [claude-code-cache-warmer](https://github.com/paulbkim-dev/claude-code-cache-warmer) by Paul B. Kim (MIT).
+- The band's look and controls are adapted from [effortless](https://github.com/HeyCubit/effortless) by HeyCubit (MIT).
 
-Both licence texts are in [THIRD_PARTY.md](THIRD_PARTY.md). cache-keeper is MIT-licensed, see [LICENSE](LICENSE).
+Licence texts: [THIRD_PARTY.md](THIRD_PARTY.md). cache-keeper is MIT-licensed: [LICENSE](LICENSE).
