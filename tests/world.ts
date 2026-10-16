@@ -228,7 +228,7 @@ export const world = (on: On, o: WorldOptions = {}) => {
     yield { kind: 'stop', stopReason: 'end_turn', usage }
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage }
   })
-  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('turn.start', (_: unknown, e: { turnId: string }) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   /** The next main request waits until the returned function is called. */
   const holdStep = () => {
@@ -241,7 +241,8 @@ export const world = (on: On, o: WorldOptions = {}) => {
   const toolResults: unknown[] = []
   let toolGate: Promise<void> | undefined
   const toolCalls: { tool: string; agentId?: string }[] = []
-  on('tool.call', async (_, e) => {
+  // Typed by hand: the 2.1.299 test kit no longer infers this hook's parameters.
+  on('tool.call', async (_: unknown, e: { readonly tool: string; readonly agentId?: string }) => {
     toolCalls.push({ tool: e.tool, ...(e.agentId !== undefined ? { agentId: e.agentId } : {}) })
     const gate = toolGate
     toolGate = undefined

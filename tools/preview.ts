@@ -15,7 +15,7 @@
 // @ts-ignore
 import { mkdirSync, writeFileSync } from 'node:fs'
 // @ts-ignore
-import { fileURLToPath } from 'node:url'
+import { URL, fileURLToPath } from 'node:url'
 declare const console: { log(...a: unknown[]): void }
 import { ART_RIGHT, PALETTE, artLayers, chipSvg, clockFrames, clockSvg, clockWidth, closeSvg, dotSvg, emberSvg, gearSvg, infoSvg, saveSvg, segSvg, sliderSvg, toggleSvg } from '../hooks/art'
 import type { ArtState, ArtTheme } from '../hooks/art'
